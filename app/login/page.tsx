@@ -10,6 +10,32 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
 import { motion } from "framer-motion"
+import axios, { AxiosError } from "axios"
+
+// API URL Configuration - Easy to change in one place
+const API_URL = "https://f8e1-105-111-15-81.ngrok-free.app/api"
+// For CSRF endpoint when using Sanctum
+const SANCTUM_CSRF_URL = API_URL.replace(/\/api$/, "") + "/sanctum/csrf-cookie"
+
+// Configure axios defaults
+axios.defaults.withCredentials = true // Important for CSRF cookie
+
+// Type definitions for better error handling
+interface ApiErrorResponse {
+  message?: string;
+  errors?: Record<string, string[]>;
+}
+
+interface UserData {
+  role: string;
+  username?: string;
+  // Add other user properties as needed
+}
+
+interface LoginResponse {
+  token: string;
+  user: UserData;
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,13 +45,62 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Simulate loading time for the animation
-    const timer = setTimeout(() => {
-      setLoading(false)
-    }, 2000)
+    // Check if the user is already authenticated
+    const checkAuth = async () => {
+      const token = localStorage.getItem("token")
+      if (token) {
+        try {
+          // Verify the token with your backend
+          const response = await axios.get<UserData>(`${API_URL}/user`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
 
-    return () => clearTimeout(timer)
-  }, [])
+          if (response.data) {
+            // Get user role from the response
+            const userRole = response.data.role || "unknown"
+            redirectUserByRole(userRole)
+          }
+        } catch (err) {
+          console.error("Authentication check failed:", err)
+          // Token is invalid or expired, clear it
+          localStorage.removeItem("token")
+          localStorage.removeItem("userRole")
+          localStorage.removeItem("username")
+          localStorage.removeItem("isLoggedIn")
+        }
+      }
+
+      // Simulate loading time for the animation
+      setTimeout(() => {
+        setLoading(false)
+      }, 2000)
+    }
+
+    checkAuth()
+  }, [router])
+
+  const redirectUserByRole = (role: string) => {
+    // Convert roles to lowercase to ensure consistency
+    const normalizedRole = role.toLowerCase()
+
+    switch (normalizedRole) {
+      case "serveur":
+        router.push("/server")
+        break
+      case "caissier":
+        router.push("/cashier")
+        break
+      case "cuisine":
+        router.push("/kitchen")
+        break
+      case "admin":
+        router.push("/admin")
+        break
+      default:
+        router.push("/")
+        console.warn("Unknown role:", role)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,47 +112,66 @@ export default function LoginPage() {
       return
     }
 
-    // Mock login logic
-    const validCredentials = {
-      serveur: { password: "serveur123", role: "serveur" },
-      caissier: { password: "caissier123", role: "cashier" },
-      cuisine: { password: "cuisine123", role: "kitchen" },
-      admin: { password: "admin123", role: "admin" },
-    }
+    try {
+      // First, get the CSRF cookie from Laravel
+      await axios.get(SANCTUM_CSRF_URL)
 
-    // Check if username exists
-    const userKey = Object.keys(validCredentials).find((key) => key === username.toLowerCase())
+      // Now, send login request
+      const response = await axios.post<LoginResponse>(`${API_URL}/login`, {
+        username: username,
+        password: password
+      })
 
-    if (userKey) {
-      const credentials = validCredentials[userKey as keyof typeof validCredentials]
+      // Check if response contains required data
+      if (!response.data || !response.data.token) {
+        throw new Error("Réponse du serveur invalide")
+      }
 
-      if (credentials.password === password) {
-        localStorage.setItem("userRole", credentials.role)
-        localStorage.setItem("username", username)
-        localStorage.setItem("isLoggedIn", "true")
+      // Store token and user info
+      const { token, user } = response.data
 
-        // Redirect based on role
-        switch (credentials.role) {
-          case "server":
-            router.push("/server")
-            break
-          case "cashier":
-            router.push("/cachier")
-            break
-          case "kitchen":
-            router.push("/kitchen")
-            break
-          case "admin":
-            router.push("/admin") // Redirect admin to the original admin interface
-            break
-          default:
-            router.push("/")
+      if (!user || !user.role) {
+        throw new Error("Informations d'utilisateur incomplètes")
+      }
+
+      localStorage.setItem("token", token)
+      localStorage.setItem("userRole", user.role)
+      localStorage.setItem("username", username)
+      localStorage.setItem("isLoggedIn", "true")
+
+      // Set token for future requests
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`
+
+      // Redirect based on role
+      redirectUserByRole(user.role)
+    } catch (err) {
+      console.error("Login error:", err)
+
+      // Type assertion for better error handling
+      const error = err as Error | AxiosError<ApiErrorResponse>
+
+      if (axios.isAxiosError(error)) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        if (error.response?.data?.message) {
+          setError(error.response.data.message)
+        } else if (error.response?.status === 401) {
+          setError("Nom d'utilisateur ou mot de passe incorrect")
+        } else if (error.response?.status === 422) {
+          setError("Données de connexion invalides")
+        } else if (error.response) {
+          setError(`Erreur du serveur (${error.response.status})`)
+        } else if (error.request) {
+          // The request was made but no response was received
+          setError("Aucune réponse du serveur. Vérifiez votre connexion internet.")
+        } else {
+          // Something happened in setting up the request that triggered an Error
+          setError(error.message || "Une erreur s'est produite lors de la connexion")
         }
       } else {
-        setError("Mot de passe incorrect")
+        // Handle non-Axios errors
+        setError((error as Error).message || "Une erreur inattendue s'est produite")
       }
-    } else {
-      setError("Nom d'utilisateur non reconnu")
     }
   }
 
@@ -175,4 +269,3 @@ export default function LoginPage() {
     </motion.div>
   )
 }
-
