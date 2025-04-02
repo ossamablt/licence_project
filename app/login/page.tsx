@@ -39,7 +39,7 @@ export default function LoginPage() {
 
     // Mock login logic
     const validCredentials = {
-      serveur: { password: "serveur123", role: "server" },
+      serveur: { password: "serveur123", role: "serveur" },
       caissier: { password: "caissier123", role: "cashier" },
       cuisine: { password: "cuisine123", role: "kitchen" },
       admin: { password: "admin123", role: "admin" },
