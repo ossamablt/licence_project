@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: '0lirab Food',
+  description: 'Fast food management system',
+  generator: 'Ossama Blt',
 }
 
 export default function RootLayout({
@@ -14,7 +14,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <link rel="icon" href="/1.png" sizes="180x180" />
+      </head>
+      <body className="bg-gray-100 text-gray-900 flex flex-col min-h-screen">
+        <main className="flex-1 container mx-auto p-4">{children}</main>
+      </body>
     </html>
   )
 }

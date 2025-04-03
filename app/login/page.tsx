@@ -13,7 +13,7 @@ import { motion } from "framer-motion"
 import axios, { AxiosError } from "axios"
 
 // API URL Configuration - Easy to change in one place
-const API_URL = "https://f8e1-105-111-15-81.ngrok-free.app/api"
+const API_URL = "https://f8e1-105-111-15-81.ngrok-free.app"
 // For CSRF endpoint when using Sanctum
 const SANCTUM_CSRF_URL = API_URL.replace(/\/api$/, "") + "/sanctum/csrf-cookie"
 
@@ -116,9 +116,12 @@ export default function LoginPage() {
       // First, get the CSRF cookie from Laravel
       await axios.get(SANCTUM_CSRF_URL)
 
-      // Now, send login request
+      // Now, send login request - using both potential field name formats
+      // Laravel typically uses 'email' rather than 'username', but we'll include both
       const response = await axios.post<LoginResponse>(`${API_URL}/login`, {
-        username: username,
+        email: username, // Try email as the field name
+        name: username,  // Try name as the field name
+        username: username, // Original username field
         password: password
       })
 
@@ -151,6 +154,10 @@ export default function LoginPage() {
       const error = err as Error | AxiosError<ApiErrorResponse>
 
       if (axios.isAxiosError(error)) {
+        // Log the detailed error information for debugging
+        console.log("Response data:", error.response?.data)
+        console.log("Request data:", error.config?.data)
+
         // The request was made and the server responded with a status code
         // that falls out of the range of 2xx
         if (error.response?.data?.message) {
@@ -158,12 +165,23 @@ export default function LoginPage() {
         } else if (error.response?.status === 401) {
           setError("Nom d'utilisateur ou mot de passe incorrect")
         } else if (error.response?.status === 422) {
-          setError("Données de connexion invalides")
+          // For validation errors, try to extract the first validation message
+          const validationErrors = error.response?.data?.errors
+          if (validationErrors && typeof validationErrors === 'object') {
+            const firstError = Object.values(validationErrors)[0]
+            if (Array.isArray(firstError) && firstError.length > 0) {
+              setError(firstError[0])
+            } else {
+              setError("Données de connexion invalides")
+            }
+          } else {
+            setError("Données de connexion invalides")
+          }
         } else if (error.response) {
           setError(`Erreur du serveur (${error.response.status})`)
         } else if (error.request) {
           // The request was made but no response was received
-          setError("Aucune réponse du serveur. Vérifiez votre connexion internet.")
+          setError("Aucune réponse du serveur. Vérifiez votre connexion internet ou l'URL de l'API.")
         } else {
           // Something happened in setting up the request that triggered an Error
           setError(error.message || "Une erreur s'est produite lors de la connexion")

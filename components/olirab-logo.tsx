@@ -61,7 +61,7 @@ export const OlirabLogo: React.FC<OlirabLogoProps> = ({ size = "md", className =
       {showText && (
         <span className={`font-bold ml-2 text-[#FF6B35] ${textSize}`}>
           OLIRAB
-          <span className="text-gray-700 font-normal ml-1">Fast Food</span>
+          <span className="text-gray-700 font-normal ml-1">Food</span>
         </span>
       )}
     </div>
