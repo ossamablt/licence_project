@@ -20,10 +20,10 @@ export default function CashierPage() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "cashier") {
-      router.push("/login")
-      return
-    }
+    // if (!isLoggedIn || userRole !== "cashier") {
+    //   router.push("/login")
+    //   return
+    // }
 
     setLoading(false)
   }, [router])
@@ -71,9 +71,8 @@ export default function CashierPage() {
 
       {/* Sidebar */}
       <div
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md`}
+        className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md`}
       >
         <div className="p-6 border-b">
           <OlirabLogo size="lg" />

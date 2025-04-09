@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import api from "@/lib/apiService"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
 import { motion } from "framer-motion"
+import apiService from "@/lib/apiService"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -28,58 +29,55 @@ export default function LoginPage() {
   }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
+    e.preventDefault();
+    setError("");
 
-    // Simple validation
     if (!username || !password) {
-      setError("Veuillez remplir tous les champs")
-      return
+      setError("Veuillez remplir tous les champs");
+      return;
     }
 
-    // Mock login logic
-    const validCredentials = {
-      serveur: { password: "serveur123", role: "server" },
-      caissier: { password: "caissier123", role: "cashier" },
-      cuisine: { password: "cuisine123", role: "kitchen" },
-      admin: { password: "admin123", role: "admin" },
-    }
+    try {
+      const response = await api.post("/login", {
+        username,
+        password,
+      });
 
-    // Check if username exists
-    const userKey = Object.keys(validCredentials).find((key) => key === username.toLowerCase())
+      // Assuming the API returns something like:
+      // { token: "jwt-token", role: "admin", username: "admin" }
+      const { token, role, username: returnedUsername } = response.data;
 
-    if (userKey) {
-      const credentials = validCredentials[userKey as keyof typeof validCredentials]
+      localStorage.setItem("token", token);
+      localStorage.setItem("userRole", role);
+      localStorage.setItem("username", returnedUsername || username);
+      localStorage.setItem("isLoggedIn", "true");
 
-      if (credentials.password === password) {
-        localStorage.setItem("userRole", credentials.role)
-        localStorage.setItem("username", username)
-        localStorage.setItem("isLoggedIn", "true")
-
-        // Redirect based on role
-        switch (credentials.role) {
-          case "server":
-            router.push("/server")
-            break
-          case "cashier":
-            router.push("/cashier")
-            break
-          case "kitchen":
-            router.push("/kitchen")
-            break
-          case "admin":
-            router.push("/admin")
-            break
-          default:
-            router.push("/")
-        }
-      } else {
-        setError("Mot de passe incorrect")
+      // Redirect based on role
+      switch (role) {
+        case "server":
+          router.push("/server");
+          break;
+        case "cashier":
+          router.push("/cashier");
+          break;
+        case "kitchen":
+          router.push("/kitchen");
+          break;
+        case "admin":
+          router.push("/admin");
+          break;
+        default:
+          router.push("/");
       }
-    } else {
-      setError("Nom d'utilisateur non reconnu")
+    } catch (err: any) {
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message);
+      } else {
+        setError("Une erreur est survenue. Veuillez réessayer.");
+      }
     }
-  }
+  };
+
 
   if (loading) {
     return (

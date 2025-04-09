@@ -18,7 +18,7 @@ export default function RootLayout({
         <link rel="icon" href="/1.png" sizes="180x180" />
       </head>
       <body className="bg-gray-100 text-gray-900 flex flex-col min-h-screen">
-        <main className="flex-1 container mx-auto p-4">{children}</main>
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   )
