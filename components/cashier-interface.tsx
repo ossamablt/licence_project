@@ -1,21 +1,23 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
+import Image from "next/image"
 import {
   CalendarIcon,
   Clock,
   CreditCard,
   DollarSign,
-  Minus,
-  Plus,
   Printer,
   ShoppingBag,
   Trash2,
   Utensils,
   X,
   Pencil,
+  Plus,
+  Minus,
+  Send,
 } from "lucide-react"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -31,134 +33,37 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-
-// Types
-interface MenuItem {
-  id: number
-  name: string
-  category: string
-  price: number
-  image?: string
-}
-
-interface OrderItem {
-  id: number
-  menuItemId: number
-  name: string
-  price: number
-  quantity: number
-}
-
-interface TableType {
-  id: number
-  number: number
-  seats: number
-  status: "libre" | "occupée" | "réservée"
-  order?: Order
-}
-
-interface Order {
-  id: number
-  tableId?: number
-  type: "sur place" | "à emporter" | "livraison"
-  status: "en cours" | "prêt" | "terminé"
-  items: OrderItem[]
-  total: number
-  createdAt: Date
-}
-
-// Sample data
-const menuItems: MenuItem[] = [
-  { id: 1, name: "Burger Classic", category: "Burgers", price: 8.5 },
-  { id: 2, name: "Burger Cheese", category: "Burgers", price: 9.5 },
-  { id: 3, name: "Burger Double", category: "Burgers", price: 12.0 },
-  { id: 4, name: "Frites", category: "Accompagnements", price: 3.5 },
-  { id: 5, name: "Onion Rings", category: "Accompagnements", price: 4.0 },
-  { id: 6, name: "Salade", category: "Accompagnements", price: 4.5 },
-  { id: 7, name: "Coca-Cola", category: "Boissons", price: 2.5 },
-  { id: 8, name: "Eau", category: "Boissons", price: 1.5 },
-  { id: 9, name: "Bière", category: "Boissons", price: 4.0 },
-  { id: 10, name: "Glace", category: "Desserts", price: 3.5 },
-  { id: 11, name: "Brownie", category: "Desserts", price: 4.5 },
-  { id: 12, name: "Menu Enfant", category: "Menus", price: 7.5 },
-  { id: 13, name: "Menu Classique", category: "Menus", price: 12.5 },
-  { id: 14, name: "Menu Maxi", category: "Menus", price: 15.0 },
-]
-
-const tables: TableType[] = [
-  { id: 1, number: 1, seats: 2, status: "libre" },
-  { id: 2, number: 2, seats: 2, status: "occupée" },
-  { id: 3, number: 3, seats: 4, status: "libre" },
-  { id: 4, number: 4, seats: 4, status: "réservée" },
-  { id: 5, number: 5, seats: 6, status: "libre" },
-  { id: 6, number: 6, seats: 6, status: "libre" },
-  { id: 7, number: 7, seats: 8, status: "occupée" },
-  { id: 8, number: 8, seats: 2, status: "libre" },
-]
-
-const orders: Order[] = [
-  {
-    id: 1,
-    tableId: 2,
-    type: "sur place",
-    status: "en cours",
-    items: [
-      { id: 1, menuItemId: 1, name: "Burger Classic", price: 8.5, quantity: 2 },
-      { id: 2, menuItemId: 4, name: "Frites", price: 3.5, quantity: 2 },
-      { id: 3, menuItemId: 7, name: "Coca-Cola", price: 2.5, quantity: 2 },
-    ],
-    total: 29.0,
-    createdAt: new Date(),
-  },
-  {
-    id: 2,
-    tableId: 7,
-    type: "sur place",
-    status: "en cours",
-    items: [
-      { id: 1, menuItemId: 13, name: "Menu Classique", price: 12.5, quantity: 4 },
-      { id: 2, menuItemId: 9, name: "Bière", price: 4.0, quantity: 4 },
-    ],
-    total: 66.0,
-    createdAt: new Date(),
-  },
-  {
-    id: 3,
-    type: "à emporter",
-    status: "prêt",
-    items: [
-      { id: 1, menuItemId: 2, name: "Burger Cheese", price: 9.5, quantity: 1 },
-      { id: 2, menuItemId: 4, name: "Frites", price: 3.5, quantity: 1 },
-    ],
-    total: 13.0,
-    createdAt: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-  },
-  {
-    id: 4,
-    type: "livraison",
-    status: "terminé",
-    items: [
-      { id: 1, menuItemId: 14, name: "Menu Maxi", price: 15.0, quantity: 2 },
-      { id: 2, menuItemId: 10, name: "Glace", price: 3.5, quantity: 2 },
-    ],
-    total: 37.0,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-  },
-]
+import { toast } from "@/hooks/use-toast"
+import {
+  getCashierOrders,
+  getTables,
+  getOrderByTableId,
+  processPayment,
+  createOrder,
+  notifyKitchen,
+  getMenuItems,
+  type Order,
+  type Table as TableType,
+  type OrderItem,
+  type MenuItem,
+} from "@/lib/sharedDataService"
 
 export function CashierInterface() {
   const [activeTab, setActiveTab] = useState("commandes")
-  const [currentOrder, setCurrentOrder] = useState<Order>({
-    id: orders.length + 1,
-    type: "sur place",
-    status: "en cours",
+  const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
+  const [newOrder, setNewOrder] = useState<{
+    type: "sur place" | "à emporter" | "livraison"
+    tableId?: number
+    tableNumber?: number
+    items: OrderItem[]
+    total: number
+  }>({
+    type: "à emporter",
     items: [],
     total: 0,
-    createdAt: new Date(),
   })
   const [selectedTable, setSelectedTable] = useState<TableType | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
@@ -198,42 +103,80 @@ export function CashierInterface() {
       note: "Anniversaire d'entreprise",
     },
   ])
+  const [tables, setTables] = useState<TableType[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [newOrderNotification, setNewOrderNotification] = useState(false)
+  const [customerPhone, setCustomerPhone] = useState<string>("")
+  const [customerName, setCustomerName] = useState<string>("")
+  const [customerAddress, setCustomerAddress] = useState<string>("")
+  const [orderToProcess, setOrderToProcess] = useState<Order | null>(null)
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
-  // Filter menu items by category
-  const filteredMenuItems =
-    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
+  // Load data on component mount and set up polling
+  useEffect(() => {
+    // Load initial data
+    loadData()
+    setMenuItems(getMenuItems())
+
+    // Set up polling for data refresh
+    const intervalId = setInterval(() => {
+      loadData()
+    }, 5000) // Poll every 5 seconds
+
+    return () => {
+      clearInterval(intervalId) // Clean up on unmount
+    }
+  }, [])
+
+  // Load data from shared service
+  const loadData = () => {
+    const cashierOrders = getCashierOrders()
+    const allTables = getTables()
+
+    // Check for new orders
+    if (orders.length > 0 && cashierOrders.length > orders.length) {
+      setNewOrderNotification(true)
+      toast({
+        title: "Nouvelle commande à encaisser",
+        description: "Une nouvelle commande est prête pour paiement",
+      })
+    }
+
+    setOrders(cashierOrders)
+    setTables(allTables)
+  }
 
   // Add item to current order
   const addItemToOrder = (item: MenuItem) => {
-    const existingItem = currentOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
+    const existingItem = newOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
 
     if (existingItem) {
       // Increment quantity if item already exists
-      const updatedItems = currentOrder.items.map((orderItem) =>
+      const updatedItems = newOrder.items.map((orderItem) =>
         orderItem.menuItemId === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
       )
 
-      setCurrentOrder({
-        ...currentOrder,
+      setNewOrder({
+        ...newOrder,
         items: updatedItems,
         total: calculateTotal(updatedItems),
       })
     } else {
       // Add new item
       const newItem: OrderItem = {
-        id: currentOrder.items.length + 1,
+        id: newOrder.items.length + 1,
         menuItemId: item.id,
         name: item.name,
         price: item.price,
         quantity: 1,
       }
 
-      const updatedItems = [...currentOrder.items, newItem]
+      const updatedItems = [...newOrder.items, newItem]
 
-      setCurrentOrder({
-        ...currentOrder,
+      setNewOrder({
+        ...newOrder,
         items: updatedItems,
         total: calculateTotal(updatedItems),
       })
@@ -242,7 +185,7 @@ export function CashierInterface() {
 
   // Update item quantity
   const updateItemQuantity = (itemId: number, change: number) => {
-    const updatedItems = currentOrder.items
+    const updatedItems = newOrder.items
       .map((item) => {
         if (item.id === itemId) {
           const newQuantity = Math.max(0, item.quantity + change)
@@ -252,8 +195,8 @@ export function CashierInterface() {
       })
       .filter((item) => item.quantity > 0) // Remove items with quantity 0
 
-    setCurrentOrder({
-      ...currentOrder,
+    setNewOrder({
+      ...newOrder,
       items: updatedItems,
       total: calculateTotal(updatedItems),
     })
@@ -270,13 +213,18 @@ export function CashierInterface() {
   }
 
   // Process payment
-  const processPayment = () => {
-    // In a real app, this would handle payment processing
-    console.log(`Payment processed: ${formatPrice(currentOrder.total)} via ${paymentMethod}`)
+  const handleProcessPayment = () => {
+    if (!orderToProcess) return
+
+    // Process payment in shared data
+    processPayment(orderToProcess.id)
 
     // Show receipt dialog
     setPaymentDialogOpen(false)
     setReceiptDialogOpen(true)
+
+    // Refresh data
+    loadData()
   }
 
   // Print receipt
@@ -303,46 +251,97 @@ export function CashierInterface() {
     }
 
     // Reset current order
-    setCurrentOrder({
-      id: currentOrder.id + 1,
-      type: "sur place",
-      status: "en cours",
-      items: [],
-      total: 0,
-      createdAt: new Date(),
-    })
-
-    // Reset selected table if applicable
-    if (selectedTable) {
-      setSelectedTable(null)
-    }
-
+    setCurrentOrder(null)
+    setSelectedTable(null)
     setReceiptDialogOpen(false)
     setAmountReceived("")
+    setOrderToProcess(null)
+
+    // Reset new order
+    setNewOrder({
+      type: newOrder.type,
+      items: [],
+      total: 0,
+    })
+
+    // Reset customer info
+    setCustomerPhone("")
+    setCustomerName("")
+    setCustomerAddress("")
+
+    // Refresh data
+    loadData()
   }
 
   // Calculate change
   const calculateChange = (): number => {
+    if (!orderToProcess) return 0
     const received = Number.parseFloat(amountReceived) || 0
-    return Math.max(0, received - currentOrder.total)
+    return Math.max(0, received - orderToProcess.total)
   }
 
   // Select a table
   const selectTable = (table: TableType) => {
-    if (table.status === "occupée") {
-      // Find the order for this table
-      const tableOrder = orders.find((order) => order.tableId === table.id)
-      if (tableOrder) {
-        setCurrentOrder(tableOrder)
+    setSelectedTable(table)
+
+    // If table has an order, load it
+    if (table.orderId) {
+      const order = getOrderByTableId(table.id)
+      if (order) {
+        setCurrentOrder(order)
+        setActiveTab("commandes")
       }
+    } else {
+      setCurrentOrder(null)
+      // Set up a new order for this table
+      setNewOrder({
+        type: "sur place",
+        tableId: table.id,
+        tableNumber: table.number,
+        items: [],
+        total: 0,
+      })
+    }
+  }
+
+  // Create and send a new order to kitchen and process payment
+  const handleCreateAndPayOrder = () => {
+    if (newOrder.items.length === 0) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez ajouter des articles à la commande",
+        variant: "destructive",
+      })
+      return
     }
 
-    setSelectedTable(table)
-    setCurrentOrder({
-      ...currentOrder,
-      tableId: table.id,
-      type: "sur place",
+    // For delivery orders, check if we have customer info
+    if (newOrder.type === "livraison" && (!customerPhone || !customerName || !customerAddress)) {
+      toast({
+        title: "Informations manquantes",
+        description: "Veuillez remplir les informations du client pour la livraison",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Create the order
+    const createdOrder = createOrder({
+      ...newOrder,
+      status: "pending",
     })
+
+    // Notify kitchen
+    notifyKitchen(createdOrder.id)
+
+    toast({
+      title: "Commande créée",
+      description: "La commande a été envoyée à la cuisine",
+    })
+
+    // Set the order for payment and open payment dialog directly
+    setOrderToProcess(createdOrder)
+    setPaymentDialogOpen(true)
   }
 
   // Add or edit reservation
@@ -355,14 +354,14 @@ export function CashierInterface() {
         reservations.map((res) =>
           res.id === selectedReservation.id
             ? {
-                ...res,
-                name: reservationName,
-                guests: Number.parseInt(reservationGuests),
-                date: date,
-                time: reservationTime,
-                phone: reservationPhone,
-                note: reservationNote,
-              }
+              ...res,
+              name: reservationName,
+              guests: Number.parseInt(reservationGuests),
+              date: date,
+              time: reservationTime,
+              phone: reservationPhone,
+              note: reservationNote,
+            }
             : res,
         ),
       )
@@ -431,6 +430,38 @@ export function CashierInterface() {
     })
   }
 
+  // Get table status color
+  const getTableStatusColor = (status: string) => {
+    switch (status) {
+      case "free":
+        return "border-green-300 bg-green-50"
+      case "occupied":
+        return "border-blue-300 bg-blue-50"
+      case "reserved":
+        return "border-amber-300 bg-amber-50"
+      default:
+        return "border-gray-300 bg-gray-50"
+    }
+  }
+
+  // Get table status text
+  const getTableStatusText = (status: string) => {
+    switch (status) {
+      case "free":
+        return "Libre"
+      case "occupied":
+        return "Occupée"
+      case "reserved":
+        return "Réservée"
+      default:
+        return status
+    }
+  }
+
+  // Filter menu items by category
+  const filteredMenuItems =
+    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
+
   const todayReservations = getReservationsForDate(new Date())
 
   return (
@@ -440,6 +471,9 @@ export function CashierInterface() {
           <TabsTrigger value="commandes" className="flex items-center gap-2">
             <ShoppingBag className="h-4 w-4" />
             Commandes
+            {newOrderNotification && (
+              <span className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">Nouveau</span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="tables" className="flex items-center gap-2">
             <Utensils className="h-4 w-4" />
@@ -455,6 +489,62 @@ export function CashierInterface() {
           {/* Menu Items */}
           <div className="w-full md:w-2/3 bg-white rounded-lg shadow-sm border border-gray-200 p-4 overflow-auto">
             <div className="mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold">Menu</h3>
+                <div className="flex gap-2">
+                  <Select
+                    value={newOrder.type}
+                    onValueChange={(value: "sur place" | "à emporter" | "livraison") =>
+                      setNewOrder({ ...newOrder, type: value })
+                    }
+                  >
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Type de commande" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sur place">Sur place</SelectItem>
+                      <SelectItem value="à emporter">À emporter</SelectItem>
+                      <SelectItem value="livraison">Livraison</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {newOrder.type === "livraison" && (
+                <div className="mb-4 p-3 bg-blue-50 rounded-md">
+                  <h4 className="font-medium mb-2">Informations de livraison</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div>
+                      <Label htmlFor="customer-name">Nom du client</Label>
+                      <Input
+                        id="customer-name"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nom du client"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="customer-phone">Téléphone</Label>
+                      <Input
+                        id="customer-phone"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="06 XX XX XX XX"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="customer-address">Adresse</Label>
+                      <Input
+                        id="customer-address"
+                        value={customerAddress}
+                        onChange={(e) => setCustomerAddress(e.target.value)}
+                        placeholder="Adresse de livraison"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 overflow-x-auto pb-2">
                 <Button
                   variant={selectedCategory === "all" ? "default" : "outline"}
@@ -483,6 +573,14 @@ export function CashierInterface() {
                   className="cursor-pointer hover:border-blue-300 transition-colors"
                   onClick={() => addItemToOrder(item)}
                 >
+                  <div className="relative h-32 w-full">
+                    <Image
+                      src={item.image || "/placeholder.svg"}
+                      alt={item.name}
+                      fill
+                      className="object-cover rounded-t-lg"
+                    />
+                  </div>
                   <CardHeader className="p-3 pb-0">
                     <CardTitle className="text-sm">{item.name}</CardTitle>
                   </CardHeader>
@@ -497,27 +595,17 @@ export function CashierInterface() {
           {/* Current Order */}
           <div className="w-full md:w-1/3 bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">Commande en cours</h3>
-              <div className="flex gap-2">
-                <Select
-                  value={currentOrder.type}
-                  onValueChange={(value: "sur place" | "à emporter" | "livraison") =>
-                    setCurrentOrder({ ...currentOrder, type: value })
-                  }
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Type de commande" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sur place">Sur place</SelectItem>
-                    <SelectItem value="à emporter">À emporter</SelectItem>
-                    <SelectItem value="livraison">Livraison</SelectItem>
-                  </SelectContent>
-                </Select>
+              <h3 className="text-lg font-bold">Nouvelle commande</h3>
+              <div className="text-sm text-gray-500">
+                {newOrder.type === "sur place"
+                  ? "Sur place"
+                  : newOrder.type === "à emporter"
+                    ? "À emporter"
+                    : "Livraison"}
               </div>
             </div>
 
-            {selectedTable && (
+            {selectedTable && newOrder.type === "sur place" && (
               <div className="mb-4 p-2 bg-blue-50 rounded-md flex items-center justify-between">
                 <div>
                   <span className="font-medium">Table {selectedTable.number}</span>
@@ -530,7 +618,7 @@ export function CashierInterface() {
             )}
 
             <div className="flex-1 overflow-auto">
-              {currentOrder.items.length > 0 ? (
+              {newOrder.items.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -541,7 +629,7 @@ export function CashierInterface() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentOrder.items.map((item) => (
+                    {newOrder.items.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>{item.name}</TableCell>
                         <TableCell className="text-right">{formatPrice(item.price)}</TableCell>
@@ -584,7 +672,7 @@ export function CashierInterface() {
             <div className="mt-4 pt-4 border-t">
               <div className="flex justify-between text-lg font-bold mb-4">
                 <span>Total</span>
-                <span>{formatPrice(currentOrder.total)}</span>
+                <span>{formatPrice(newOrder.total)}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -592,181 +680,22 @@ export function CashierInterface() {
                   variant="outline"
                   className="w-full"
                   onClick={() =>
-                    setCurrentOrder({
-                      ...currentOrder,
+                    setNewOrder({
+                      ...newOrder,
                       items: [],
                       total: 0,
                     })
                   }
-                  disabled={currentOrder.items.length === 0}
+                  disabled={newOrder.items.length === 0}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Annuler
                 </Button>
 
-                <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="w-full" disabled={currentOrder.items.length === 0}>
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      Paiement
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Paiement</DialogTitle>
-                      <DialogDescription>Montant total: {formatPrice(currentOrder.total)}</DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-4 py-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="payment-method">Méthode de paiement</Label>
-                          <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                            <SelectTrigger id="payment-method">
-                              <SelectValue placeholder="Choisir une méthode" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="carte">Carte bancaire</SelectItem>
-                              <SelectItem value="espèces">Espèces</SelectItem>
-                              <SelectItem value="chèque">Chèque</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {paymentMethod === "espèces" && (
-                          <div className="space-y-2">
-                            <Label htmlFor="amount-received">Montant reçu</Label>
-                            <Input
-                              id="amount-received"
-                              type="number"
-                              value={amountReceived}
-                              onChange={(e) => setAmountReceived(e.target.value)}
-                              placeholder="0.00"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {paymentMethod === "espèces" && amountReceived && (
-                        <div className="p-3 bg-blue-50 rounded-md">
-                          <div className="flex justify-between">
-                            <span>Montant reçu:</span>
-                            <span>{formatPrice(Number.parseFloat(amountReceived) || 0)}</span>
-                          </div>
-                          <div className="flex justify-between font-bold">
-                            <span>Monnaie à rendre:</span>
-                            <span>{formatPrice(calculateChange())}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-                        Annuler
-                      </Button>
-                      <Button onClick={processPayment}>
-                        {paymentMethod === "carte" ? (
-                          <>
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Payer par carte
-                          </>
-                        ) : paymentMethod === "espèces" ? (
-                          <>
-                            <DollarSign className="h-4 w-4 mr-2" />
-                            Encaisser
-                          </>
-                        ) : (
-                          "Valider le paiement"
-                        )}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-
-                {/* Receipt Dialog */}
-                <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Ticket de paiement</DialogTitle>
-                      <DialogDescription>Paiement effectué avec succès</DialogDescription>
-                    </DialogHeader>
-
-                    <div className="border rounded-md p-4 my-4">
-                      <div ref={receiptRef}>
-                        <div className="header">
-                          <h3 className="text-lg font-bold">OLIRAB RESTAURANT</h3>
-                          <p>123 Rue de Paris, 75001 Paris</p>
-                          <p>Tel: 01 23 45 67 89</p>
-                          <p>{format(new Date(), "dd/MM/yyyy HH:mm")}</p>
-                        </div>
-
-                        <div className="divider"></div>
-
-                        <div>
-                          <p>Type: {currentOrder.type}</p>
-                          {selectedTable && <p>Table: {selectedTable.number}</p>}
-                          <p>Commande #{currentOrder.id}</p>
-                        </div>
-
-                        <div className="divider"></div>
-
-                        {currentOrder.items.map((item) => (
-                          <div key={item.id} className="item">
-                            <span>
-                              {item.quantity}x {item.name}
-                            </span>
-                            <span>{formatPrice(item.price * item.quantity)}</span>
-                          </div>
-                        ))}
-
-                        <div className="divider"></div>
-
-                        <div className="total">
-                          <div className="item">
-                            <span>TOTAL</span>
-                            <span>{formatPrice(currentOrder.total)}</span>
-                          </div>
-
-                          <div className="item">
-                            <span>Paiement par {paymentMethod}</span>
-                            <span>{formatPrice(currentOrder.total)}</span>
-                          </div>
-
-                          {paymentMethod === "espèces" && amountReceived && (
-                            <>
-                              <div className="item">
-                                <span>Montant reçu</span>
-                                <span>{formatPrice(Number.parseFloat(amountReceived) || 0)}</span>
-                              </div>
-                              <div className="item">
-                                <span>Monnaie rendue</span>
-                                <span>{formatPrice(calculateChange())}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        <div className="divider"></div>
-
-                        <div className="footer">
-                          <p>Merci de votre visite!</p>
-                          <p>TVA: FR 12 345 678 901</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setReceiptDialogOpen(false)}>
-                        Fermer
-                      </Button>
-                      <Button onClick={printReceipt}>
-                        <Printer className="h-4 w-4 mr-2" />
-                        Imprimer le ticket
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                <Button className="w-full" disabled={newOrder.items.length === 0} onClick={handleCreateAndPayOrder}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Envoyer et Payer
+                </Button>
               </div>
             </div>
           </div>
@@ -787,13 +716,8 @@ export function CashierInterface() {
               {tables.map((table) => (
                 <Card
                   key={table.id}
-                  className={`cursor-pointer ${
-                    table.status === "libre"
-                      ? "border-green-300 bg-green-50"
-                      : table.status === "occupée"
-                        ? "border-blue-300 bg-blue-50"
-                        : "border-amber-300 bg-amber-50"
-                  } ${selectedTable?.id === table.id ? "ring-2 ring-blue-500" : ""}`}
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${getTableStatusColor(table.status)} ${selectedTable?.id === table.id ? "ring-2 ring-blue-500" : ""
+                    }`}
                   onClick={() => selectTable(table)}
                 >
                   <CardHeader className="p-3 pb-0">
@@ -802,16 +726,32 @@ export function CashierInterface() {
                   <CardContent className="p-3 text-center">
                     <p className="text-sm">{table.seats} places</p>
                     <p
-                      className={`text-xs font-medium mt-1 ${
-                        table.status === "libre"
-                          ? "text-green-600"
-                          : table.status === "occupée"
-                            ? "text-blue-600"
-                            : "text-amber-600"
-                      }`}
+                      className={`text-xs font-medium mt-1 ${table.status === "free"
+                        ? "text-green-600"
+                        : table.status === "occupied"
+                          ? "text-blue-600"
+                          : "text-amber-600"
+                        }`}
                     >
-                      {table.status.charAt(0).toUpperCase() + table.status.slice(1)}
+                      {getTableStatusText(table.status)}
                     </p>
+                    {table.status === "occupied" && (
+                      <Button
+                        size="sm"
+                        className="mt-2 w-full"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          selectTable(table)
+                          const order = getOrderByTableId(table.id)
+                          if (order) {
+                            setOrderToProcess(order)
+                            setPaymentDialogOpen(true)
+                          }
+                        }}
+                      >
+                        Encaisser
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -1024,6 +964,167 @@ export function CashierInterface() {
         </TabsContent>
       </Tabs>
 
+      {/* Payment Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Paiement</DialogTitle>
+            <DialogDescription>
+              Montant total: {orderToProcess ? formatPrice(orderToProcess.total) : formatPrice(0)}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="payment-method">Méthode de paiement</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger id="payment-method">
+                    <SelectValue placeholder="Choisir une méthode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="carte">Carte bancaire</SelectItem>
+                    <SelectItem value="espèces">Espèces</SelectItem>
+                    <SelectItem value="chèque">Chèque</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {paymentMethod === "espèces" && (
+                <div className="space-y-2">
+                  <Label htmlFor="amount-received">Montant reçu</Label>
+                  <Input
+                    id="amount-received"
+                    type="number"
+                    value={amountReceived}
+                    onChange={(e) => setAmountReceived(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+            </div>
+
+            {paymentMethod === "espèces" && amountReceived && (
+              <div className="p-3 bg-blue-50 rounded-md">
+                <div className="flex justify-between">
+                  <span>Montant reçu:</span>
+                  <span>{formatPrice(Number.parseFloat(amountReceived) || 0)}</span>
+                </div>
+                <div className="flex justify-between font-bold">
+                  <span>Monnaie à rendre:</span>
+                  <span>{formatPrice(calculateChange())}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleProcessPayment}>
+              {paymentMethod === "carte" ? (
+                <>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Payer par carte
+                </>
+              ) : paymentMethod === "espèces" ? (
+                <>
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Encaisser
+                </>
+              ) : (
+                "Valider le paiement"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt Dialog */}
+      <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ticket de paiement</DialogTitle>
+            <DialogDescription>Paiement effectué avec succès</DialogDescription>
+          </DialogHeader>
+
+          <div className="border rounded-md p-4 my-4">
+            <div ref={receiptRef}>
+              <div className="header">
+                <h3 className="text-lg font-bold">OLIRAB FAST FOOD</h3>
+                <p>123 Rue de Paris, 75001 Paris</p>
+                <p>Tel: 01 23 45 67 89</p>
+                <p>{format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+              </div>
+
+              <div className="divider"></div>
+
+              <div>
+                <p>Type: {orderToProcess?.type}</p>
+                {selectedTable && <p>Table: {selectedTable.number}</p>}
+                <p>Commande #{orderToProcess?.id}</p>
+              </div>
+
+              <div className="divider"></div>
+
+              {orderToProcess?.items.map((item) => (
+                <div key={item.id} className="item">
+                  <span>
+                    {item.quantity}x {item.name}
+                  </span>
+                  <span>{formatPrice(item.price * item.quantity)}</span>
+                </div>
+              ))}
+
+              <div className="divider"></div>
+
+              <div className="total">
+                <div className="item">
+                  <span>TOTAL</span>
+                  <span>{orderToProcess ? formatPrice(orderToProcess.total) : formatPrice(0)}</span>
+                </div>
+
+                <div className="item">
+                  <span>Paiement par {paymentMethod}</span>
+                  <span>{orderToProcess ? formatPrice(orderToProcess.total) : formatPrice(0)}</span>
+                </div>
+
+                {paymentMethod === "espèces" && amountReceived && (
+                  <>
+                    <div className="item">
+                      <span>Montant reçu</span>
+                      <span>{formatPrice(Number.parseFloat(amountReceived) || 0)}</span>
+                    </div>
+                    <div className="item">
+                      <span>Monnaie rendue</span>
+                      <span>{formatPrice(calculateChange())}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="divider"></div>
+
+              <div className="footer">
+                <p>Merci de votre visite!</p>
+                <p>TVA: FR 12 345 678 901</p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiptDialogOpen(false)}>
+              Fermer
+            </Button>
+            <Button onClick={printReceipt}>
+              <Printer className="h-4 w-4 mr-2" />
+              Imprimer le ticket
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Reservation Dialog */}
       <Dialog open={reservationDialogOpen} onOpenChange={setReservationDialogOpen}>
         <DialogContent>
@@ -1125,4 +1226,3 @@ export function CashierInterface() {
     </div>
   )
 }
-

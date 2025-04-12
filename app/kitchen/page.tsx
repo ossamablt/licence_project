@@ -51,10 +51,10 @@ export default function KitchenInterface() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "kitchen") {
-      router.push("/login")
-      return
-    }
+    // if (!isLoggedIn || userRole !== "kitchen") {
+    //   router.push("/login")
+    //   return
+    // }
 
     // Connect to notification service
     notificationService.connect()

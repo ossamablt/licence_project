@@ -55,7 +55,7 @@ export default function LoginPage() {
       // Redirect based on role
       switch (role) {
         case "server":
-          router.push("/server");
+          router.push("/serveur");
           break;
         case "cashier":
           router.push("/cashier");

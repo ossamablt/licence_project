@@ -78,10 +78,10 @@ export default function ServerInterface() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "server") {
-      router.push("/login")
-      return
-    }
+    // if (!isLoggedIn || userRole !== "server") {
+    //   router.push("/login")
+    //   return
+    // }
 
     // Connect to notification service
     notificationService.connect()
@@ -398,15 +398,14 @@ export default function ServerInterface() {
               {filteredOrders.map((order) => (
                 <Card key={order.id} className="relative overflow-hidden">
                   <div
-                    className={`absolute top-0 left-0 w-1 h-full ${
-                      order.status === "preparing"
-                        ? "bg-blue-500"
-                        : order.status === "ready"
-                          ? "bg-green-500"
-                          : order.status === "completed"
-                            ? "bg-gray-500"
-                            : "bg-yellow-500"
-                    }`}
+                    className={`absolute top-0 left-0 w-1 h-full ${order.status === "preparing"
+                      ? "bg-blue-500"
+                      : order.status === "ready"
+                        ? "bg-green-500"
+                        : order.status === "completed"
+                          ? "bg-gray-500"
+                          : "bg-yellow-500"
+                      }`}
                   />
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
@@ -505,13 +504,12 @@ export default function ServerInterface() {
                     <h3 className="text-lg font-bold mb-1">Table {table.number}</h3>
                     <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        table.status === "free"
-                          ? "bg-green-200 text-green-800"
-                          : table.status === "occupied"
-                            ? "bg-blue-200 text-blue-800"
-                            : "bg-yellow-200 text-yellow-800"
-                      }`}
+                      className={`text-xs px-2 py-1 rounded-full ${table.status === "free"
+                        ? "bg-green-200 text-green-800"
+                        : table.status === "occupied"
+                          ? "bg-blue-200 text-blue-800"
+                          : "bg-yellow-200 text-yellow-800"
+                        }`}
                     >
                       {getTableStatusText(table.status)}
                     </span>
@@ -542,13 +540,12 @@ export default function ServerInterface() {
                   <h3 className="text-lg font-bold mb-1">Table {table.number}</h3>
                   <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                   <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      table.status === "free"
-                        ? "bg-green-200 text-green-800"
-                        : table.status === "occupied"
-                          ? "bg-blue-200 text-blue-800"
-                          : "bg-yellow-200 text-yellow-800"
-                    }`}
+                    className={`text-xs px-2 py-1 rounded-full ${table.status === "free"
+                      ? "bg-green-200 text-green-800"
+                      : table.status === "occupied"
+                        ? "bg-blue-200 text-blue-800"
+                        : "bg-yellow-200 text-yellow-800"
+                      }`}
                   >
                     {getTableStatusText(table.status)}
                   </span>
