@@ -22,6 +22,9 @@ import {
   Menu,
   X,
   LogOut,
+
+
+
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,6 +64,7 @@ interface Employee {
   salary?: number
   notes?: string
 }
+
 
 interface Product {
   id: number
@@ -144,7 +148,7 @@ export default function RestaurantManagement() {
   const [employees, setEmployees] = useState<Employee[]>([
     {
       id: 1,
-      name: "MR.Zenir",
+      name: "ossama blt",
       role: "Manager",
       hireDate: "12/01/2023",
       designation: "bessam",
@@ -293,8 +297,8 @@ export default function RestaurantManagement() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "admin") {
-      router.push("/login")
+    if (!isLoggedIn || userRole !== "Gérant") {
+      router.push("/")
       return
     }
   }, [router])
@@ -673,7 +677,9 @@ export default function RestaurantManagement() {
                 <AvatarImage src="/placeholder.svg?height=40&width=40" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
               </Avatar>
-              <span className="font-medium">MR.Zenir</span>
+              <span className="font-medium">
+                {localStorage.getItem("username") || "Gérant"}
+              </span>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
               <LogOut className="h-5 w-5" />

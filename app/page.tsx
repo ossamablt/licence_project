@@ -1,16 +1,22 @@
 "use client"
 
-import type React from "react"
-import api from "@/lib/apiService"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
 import { motion } from "framer-motion"
-import apiService from "@/lib/apiService"
+import { User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,66 +24,79 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    // Simulate loading time for the animation
     const timer = setTimeout(() => {
       setLoading(false)
     }, 2000)
-
     return () => clearTimeout(timer)
   }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+    e.preventDefault()
+    setError("")
+    setIsSubmitting(true)
+    console.log("Login started...")
 
     if (!username || !password) {
-      setError("Veuillez remplir tous les champs");
-      return;
+      setError("Veuillez remplir tous les champs")
+      setIsSubmitting(false)
+      return
     }
 
     try {
       const response = await api.post("/login", {
-        username,
-        password,
-      });
+        "userName": username,
+        "password": password,
+      })
+      if (response.status !== 200) {
+        setError("Erreur de connexion")
+        setIsSubmitting(false)
+        return
+      }
 
-      // Assuming the API returns something like:
-      // { token: "jwt-token", role: "admin", username: "admin" }
-      const { token, role, username: returnedUsername } = response.data;
 
-      localStorage.setItem("token", token);
-      localStorage.setItem("userRole", role);
-      localStorage.setItem("username", returnedUsername || username);
-      localStorage.setItem("isLoggedIn", "true");
 
-      // Redirect based on role
-      switch (role) {
-        case "server":
-          router.push("/serveur");
-          break;
-        case "cashier":
-          router.push("/cashier");
-          break;
-        case "kitchen":
-          router.push("/kitchen");
-          break;
-        case "admin":
-          router.push("/admin");
-          break;
+      let data = response.data
+
+
+
+
+      console.log("Login successful:", response.data)
+
+      localStorage.setItem("token", data.token)
+      localStorage.setItem("userRole", data.user.role)
+      localStorage.setItem("username", data.user.userName)
+      localStorage.setItem("isLoggedIn", "true")
+
+      // Role-based redirection
+      switch (data.user.role) {
+        case "Serveur":
+          router.push("/serveur")
+          break
+        case "Caissier":
+          router.push("/cachier")
+          break
+        case "Cuisinier":
+          router.push("/kitchen")
+          break
+        case "Gérant":
+          router.push("/admin")
+          break
         default:
-          router.push("/");
+          router.push("/")
       }
     } catch (err: any) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
+      console.error("Login error:", err)
+      if (err.response?.data?.message) {
+        setError(err.response.data.message)
       } else {
-        setError("Une erreur est survenue. Veuillez réessayer.");
+        setError(err.message || "Erreur de connexion")
       }
+      setIsSubmitting(false)
     }
-  };
-
+  }
 
   if (loading) {
     return (
@@ -100,12 +119,10 @@ export default function LoginPage() {
               <motion.div
                 key={i}
                 className="w-3 h-3 rounded-full bg-[#FF6B35]"
-                animate={{
-                  y: [0, -10, 0],
-                }}
+                animate={{ y: [0, -10, 0] }}
                 transition={{
                   duration: 0.6,
-                  repeat: Number.POSITIVE_INFINITY,
+                  repeat: Infinity,
                   repeatType: "loop",
                   delay: i * 0.2,
                 }}
@@ -137,6 +154,7 @@ export default function LoginPage() {
           <CardTitle>Connexion</CardTitle>
           <CardDescription>Connectez-vous pour accéder à votre espace</CardDescription>
         </CardHeader>
+
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -147,6 +165,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Entrez votre nom d'utilisateur"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -158,14 +177,20 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Entrez votre mot de passe"
+                disabled={isSubmitting}
               />
             </div>
 
             {error && <div className="text-sm text-red-500 text-center">{error}</div>}
           </CardContent>
+
           <CardFooter>
-            <Button type="submit" className="w-full bg-[#FF6B35] hover:bg-[#e55a29]">
-              Se connecter
+            <Button
+              type="submit"
+              className="w-full bg-[#FF6B35] hover:bg-[#e55a29]"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Connexion en cours..." : "Se connecter"}
             </Button>
           </CardFooter>
         </form>
@@ -173,4 +198,3 @@ export default function LoginPage() {
     </motion.div>
   )
 }
-

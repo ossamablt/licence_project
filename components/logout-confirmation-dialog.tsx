@@ -24,7 +24,9 @@ export const LogoutConfirmationDialog: React.FC<LogoutConfirmationDialogProps> =
     localStorage.removeItem("isLoggedIn")
     localStorage.removeItem("userRole")
     localStorage.removeItem("username")
-    router.push("/login")
+    localStorage.removeItem("token")
+
+    router.push("/")
   }
 
   return (
