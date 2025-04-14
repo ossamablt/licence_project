@@ -66,12 +66,12 @@ export default function LoginPage() {
       console.log("Login successful:", response.data)
 
       localStorage.setItem("token", data.token)
-      localStorage.setItem("userRole", data.user.role)
+      localStorage.setItem("userRole", data.role)
       localStorage.setItem("username", data.user.userName)
       localStorage.setItem("isLoggedIn", "true")
 
       // Role-based redirection
-      switch (data.user.role) {
+      switch (data.role) {
         case "Serveur":
           router.push("/serveur")
           break

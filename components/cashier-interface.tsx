@@ -1248,4 +1248,4 @@ const CashierInterface = () => {
 
 };
 
-export default ReservationDialog;
+export default CashierInterface;
