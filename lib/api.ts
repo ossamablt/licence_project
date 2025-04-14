@@ -3,7 +3,7 @@ import axios from "axios"
 
 // Set the base URL for your API
 const api = axios.create({
-  baseURL: "https://kksybw3tzm.sharedwithexpose.com/api", // Update with the correct URL
+  baseURL: "https://3pejo36fix.sharedwithexpose.com/api", // Update with the correct URL
   headers: {
     "Content-Type": "application/json",
   },

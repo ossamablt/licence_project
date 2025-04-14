@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { format } from "date-fns"
+import { format, formatDate, formatters } from "date-fns"
 import { fr } from "date-fns/locale"
 import Image from "next/image"
 import {
@@ -54,12 +54,12 @@ import api from "@/lib/api"
 
 interface Reservation {
   id: number
-  name: string
-  guests: number
+  client_name: string
+  number_of_persones: number
   date: Date | string
-  time: string
-  table?: number | null
-  phone: string
+  hour: string
+  tables_id: number
+  phone_number: string
   note: string
 }
 
@@ -92,29 +92,29 @@ export default function CashierInterface() {
   const [reservationDialogOpen, setReservationDialogOpen] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [isEditingReservation, setIsEditingReservation] = useState(false)
-  const [reservations, setReservations] = useState<Reservation[]>([
-    {
-      id: 1,
-      name: "Dupont",
-      guests: 4,
-      date: new Date(),
-      time: "19:30",
-      table: 3,
-      phone: "06 12 34 56 78",
-      note: "Près de la fenêtre",
-    },
-    { id: 2, name: "Martin", guests: 2, date: new Date(), time: "20:00", table: 8, phone: "06 23 45 67 89", note: "" },
-    {
-      id: 3,
-      name: "Groupe Entreprise",
-      guests: 8,
-      date: new Date(),
-      time: "12:30",
-      table: 7,
-      phone: "06 34 56 78 90",
-      note: "Anniversaire d'entreprise",
-    },
-  ])
+  const [reservations, setReservations] = useState<Reservation[]>()
+  //   {
+  //     id: 1,
+  //     name: "Dupont",
+  //     guests: 4,
+  //     date: new Date(),
+  //     time: "19:30",
+  //     table: 3,
+  //     phone: "06 12 34 56 78",
+  //     note: "Près de la fenêtre",
+  //   },
+  //   { id: 2, name: "Martin", guests: 2, date: new Date(), time: "20:00", table: 8, phone: "06 23 45 67 89", note: "" },
+  //   {
+  //     id: 3,
+  //     name: "Groupe Entreprise",
+  //     guests: 8,
+  //     date: new Date(),
+  //     time: "12:30",
+  //     table: 7,
+  //     phone: "06 34 56 78 90",
+  //     note: "Anniversaire d'entreprise",
+  //   },
+  // ])
   const [tables, setTables] = useState<TableType[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -326,7 +326,7 @@ export default function CashierInterface() {
       })
       return
     }
-
+    //Réservations du jour
     // For delivery orders, check if we have customer info
     if (newOrder.type === "livraison" && (!customerPhone || !customerName || !customerAddress)) {
       toast({
@@ -375,7 +375,7 @@ export default function CashierInterface() {
     if (isEditingReservation && selectedReservation) {
       // Update existing reservation
       setReservations(
-        reservations.map((res) =>
+        (reservations ?? []).map((res) =>
           res.id === selectedReservation.id
             ? {
               ...res,
@@ -392,13 +392,12 @@ export default function CashierInterface() {
     } else {
       // Add new reservation
       const newReservation = {
-        id: reservations.length + 1,
-        name: reservationName,
-        guests: Number.parseInt(reservationGuests),
-        date: date,
-        time: reservationTime,
-        table: selectedTable ? selectedTable.number : null,
-        phone: reservationPhone,
+        client_name: reservationName,
+        number_of_persones: Number.parseInt(reservationGuests),
+        date: date.toISOString().split('T')[0], // Use the selected date
+        hour: reservationTime,
+        client_phone: reservationPhone,
+        duration: 2,
         note: reservationNote,
       }
 
@@ -407,7 +406,7 @@ export default function CashierInterface() {
         console.log("Réservation ajoutée avec succès:", response.data)
 
         // Update state with server response instead of local data
-        setReservations([...reservations, response.data])
+        setReservations([...(reservations || []), response.data])
       } catch (error) {
         console.error("Erreur lors de l'ajout de la réservation:", error)
         toast({
@@ -426,11 +425,11 @@ export default function CashierInterface() {
   // Edit reservation
   const editReservation = (reservation: Reservation) => {
     setSelectedReservation(reservation)
-    setReservationName(reservation.name)
-    setReservationGuests(reservation.guests.toString())
+    setReservationName(reservation.client_name)
+    setReservationGuests(reservation.number_of_persones.toString())
     setDate(typeof reservation.date === "string" ? new Date(reservation.date) : reservation.date)
-    setReservationTime(reservation.time)
-    setReservationPhone(reservation.phone)
+    setReservationTime(reservation.hour)
+    setReservationPhone(reservation.phone_number)
     setReservationNote(reservation.note)
     setIsEditingReservation(true)
     setReservationDialogOpen(true)
@@ -438,22 +437,12 @@ export default function CashierInterface() {
 
   // Delete reservation
   const deleteReservation = (id: number) => {
-    setReservations(reservations.filter((res) => res.id !== id))
+    setReservations((reservations ?? []).filter((res) => res.id !== id))
   }
 
-  // Get reservations for selected date
-  const getReservationsForDate = (selectedDate: Date | undefined) => {
-    if (!selectedDate) return []
 
-    return reservations.filter((res) => {
-      const resDate = typeof res.date === "string" ? new Date(res.date) : res.date
-      return (
-        resDate.getDate() === selectedDate.getDate() &&
-        resDate.getMonth() === selectedDate.getMonth() &&
-        resDate.getFullYear() === selectedDate.getFullYear()
-      )
-    })
-  }
+
+
 
   // Get table status color
   const getTableStatusColor = (status: string) => {
@@ -484,11 +473,34 @@ export default function CashierInterface() {
   }
 
   // Filter menu items by category
-  const filteredMenuItems =
-    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
+  // const filteredMenuItems =
+  //   selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
 
-  const todayReservations = getReservationsForDate(new Date())
+  const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
+  const getReservationsForDate = async (selectedDate: Date | undefined) => {
+    if (!selectedDate) return [];
 
+    try {
+      const formattedDate = selectedDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+      const response = await api.get(`/reservation?date=${formattedDate}`);
+      console.log("Reservations for date:", response.data);
+      return response.data || [];
+    } catch (error) {
+      console.error("Failed to fetch reservations:", error);
+      return [];
+    }
+  };
+  useEffect(() => {
+    const fetchReservations = async () => {
+
+
+      const reservations = await getReservationsForDate(new Date("2025-04-15"));
+      setTodayReservations(reservations);
+    }
+
+    fetchReservations()
+  }, [])
+  console.log("Today Reservations:", todayReservations)
   return (
     <div className="h-full flex flex-col">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
@@ -591,7 +603,7 @@ export default function CashierInterface() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {/* <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {filteredMenuItems.map((item) => (
                 <Card
                   key={item.id}
@@ -614,7 +626,7 @@ export default function CashierInterface() {
                   </CardContent>
                 </Card>
               ))}
-            </div>
+            </div> */}
           </div>
 
           {/* Current Order */}
@@ -788,17 +800,17 @@ export default function CashierInterface() {
                 {todayReservations.map((reservation) => (
                   <div key={reservation.id} className="border rounded-md p-3 bg-blue-50/50">
                     <div className="flex justify-between items-start">
-                      <div>
+                      <div>//Reservation
                         <p className="font-medium">
-                          {reservation.name} ({reservation.guests} pers.)
+                          {reservation.client_name} ({reservation.number_of_persones} pers.)
                         </p>
                         <div className="flex items-center text-sm text-gray-500 mt-1">
                           <Clock className="h-3 w-3 mr-1" />
-                          <span>{reservation.time}</span>
-                          {reservation.table && (
+                          <span>{reservation.hour}</span>
+                          {reservation.tables_id && (
                             <>
                               <span className="mx-2">•</span>
-                              <span>Table {reservation.table}</span>
+                              {<span>Table {reservation.tables_id}</span>}
                             </>
                           )}
                         </div>
@@ -861,13 +873,13 @@ export default function CashierInterface() {
                       <h4 className="font-medium mb-2">
                         Réservations pour {date ? format(date, "dd MMMM yyyy", { locale: fr }) : "aujourd'hui"}
                       </h4>
-                      <div className="space-y-2">
+                      {/* <div className="space-y-2">
                         {getReservationsForDate(date).length > 0 ? (
                           getReservationsForDate(date).map((reservation) => (
                             <div
                               key={reservation.id}
                               className="p-2 border rounded-md flex justify-between items-center"
-                            >//Coca-Cola
+                            >
 
 
                               <div>
@@ -895,7 +907,7 @@ export default function CashierInterface() {
                         ) : (
                           <p className="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>
                         )}
-                      </div>
+                      </div> */}
                     </div>
                   </CardContent>
                 </Card>
