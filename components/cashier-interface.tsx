@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { format, formatDate, formatters } from "date-fns"
+import { format } from "date-fns"
 import { fr } from "date-fns/locale"
 import Image from "next/image"
 import {
@@ -58,12 +58,13 @@ interface Reservation {
   number_of_persones: number
   date: Date | string
   hour: string
-  tables_id: number
+  tables_id: number | null
   phone_number: string
   note: string
 }
 
 export default function CashierInterface() {
+  // Gestion des états
   const [activeTab, setActiveTab] = useState("commandes")
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
   const [newOrder, setNewOrder] = useState<{
@@ -92,29 +93,6 @@ export default function CashierInterface() {
   const [reservationDialogOpen, setReservationDialogOpen] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [isEditingReservation, setIsEditingReservation] = useState(false)
-  const [reservations, setReservations] = useState<Reservation[]>()
-  //   {
-  //     id: 1,
-  //     name: "Dupont",
-  //     guests: 4,
-  //     date: new Date(),
-  //     time: "19:30",
-  //     table: 3,
-  //     phone: "06 12 34 56 78",
-  //     note: "Près de la fenêtre",
-  //   },
-  //   { id: 2, name: "Martin", guests: 2, date: new Date(), time: "20:00", table: 8, phone: "06 23 45 67 89", note: "" },
-  //   {
-  //     id: 3,
-  //     name: "Groupe Entreprise",
-  //     guests: 8,
-  //     date: new Date(),
-  //     time: "12:30",
-  //     table: 7,
-  //     phone: "06 34 56 78 90",
-  //     note: "Anniversaire d'entreprise",
-  //   },
-  // ])
   const [tables, setTables] = useState<TableType[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -123,31 +101,56 @@ export default function CashierInterface() {
   const [customerName, setCustomerName] = useState<string>("")
   const [customerAddress, setCustomerAddress] = useState<string>("")
   const [orderToProcess, setOrderToProcess] = useState<Order | null>(null)
+  const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
-  // Load data on component mount and set up polling
+  // Chargement des données au montage du composant et configuration du polling
   useEffect(() => {
-    // Load initial data
     loadData()
     setMenuItems(getMenuItems())
+    fetchTodayReservations()
 
-    // Set up polling for data refresh
     const intervalId = setInterval(() => {
       loadData()
-    }, 5000) // Poll every 5 seconds
+    }, 5000) // Interrogation toutes les 5 secondes
 
     return () => {
-      clearInterval(intervalId) // Clean up on unmount
+      clearInterval(intervalId) // Nettoyage lors du démontage
     }
   }, [])
 
-  // Load data from shared service
+  // Récupérer les réservations du jour
+  const fetchTodayReservations = async () => {
+    try {
+      const formattedDate = new Date().toISOString().split("T")[0]
+      const response = await api.get(`/reservation?date=${formattedDate}`)
+      setTodayReservations(response.data || [])
+    } catch (error) {
+      console.error("Échec de récupération des réservations du jour:", error)
+      setTodayReservations([])
+    }
+  }
+
+  // Obtenir les réservations pour une date spécifique
+  const getReservationsForDate = async (selectedDate: Date | undefined) => {
+    if (!selectedDate) return []
+
+    try {
+      const formattedDate = selectedDate.toISOString().split("T")[0]
+      const response = await api.get(`/reservation?date=${formattedDate}`)
+      return response.data || []
+    } catch (error) {
+      console.error("Échec de récupération des réservations:", error)
+      return []
+    }
+  }
+
+  // Charger les données depuis le service partagé
   const loadData = () => {
     const cashierOrders = getCashierOrders()
     const allTables = getTables()
 
-    // Check for new orders
     if (orders.length > 0 && cashierOrders.length > orders.length) {
       setNewOrderNotification(true)
       toast({
@@ -160,12 +163,12 @@ export default function CashierInterface() {
     setTables(allTables)
   }
 
-  // Add item to current order
+  // Ajouter un article à la commande en cours
   const addItemToOrder = (item: MenuItem) => {
     const existingItem = newOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
 
     if (existingItem) {
-      // Increment quantity if item already exists
+      // Incrémenter la quantité si l'article existe déjà
       const updatedItems = newOrder.items.map((orderItem) =>
         orderItem.menuItemId === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
       )
@@ -176,7 +179,7 @@ export default function CashierInterface() {
         total: calculateTotal(updatedItems),
       })
     } else {
-      // Add new item
+      // Ajouter un nouvel article
       const newItem: OrderItem = {
         id: newOrder.items.length + 1,
         menuItemId: item.id,
@@ -195,7 +198,7 @@ export default function CashierInterface() {
     }
   }
 
-  // Update item quantity
+  // Mettre à jour la quantité d'un article
   const updateItemQuantity = (itemId: number, change: number) => {
     const updatedItems = newOrder.items
       .map((item) => {
@@ -205,7 +208,7 @@ export default function CashierInterface() {
         }
         return item
       })
-      .filter((item) => item.quantity > 0) // Remove items with quantity 0
+      .filter((item) => item.quantity > 0) // Supprimer les articles avec quantité 0
 
     setNewOrder({
       ...newOrder,
@@ -214,32 +217,27 @@ export default function CashierInterface() {
     })
   }
 
-  // Calculate total
+  // Calculer le total
   const calculateTotal = (items: OrderItem[]): number => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
   }
 
-  // Format price
+  // Formater le prix
   const formatPrice = (price: number): string => {
     return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(price)
   }
 
-  // Process payment
+  // Traiter le paiement
   const handleProcessPayment = () => {
     if (!orderToProcess) return
 
-    // Process payment in shared data
     processPayment(orderToProcess.id)
-
-    // Show receipt dialog
     setPaymentDialogOpen(false)
     setReceiptDialogOpen(true)
-
-    // Refresh data
     loadData()
   }
 
-  // Print receipt
+  // Imprimer le reçu
   const printReceipt = () => {
     if (receiptRef.current) {
       const printWindow = window.open("", "_blank")
@@ -262,41 +260,34 @@ export default function CashierInterface() {
       }
     }
 
-    // Reset current order
+    // Réinitialiser les états
     setCurrentOrder(null)
     setSelectedTable(null)
     setReceiptDialogOpen(false)
     setAmountReceived("")
     setOrderToProcess(null)
-
-    // Reset new order
     setNewOrder({
       type: newOrder.type,
       items: [],
       total: 0,
     })
-
-    // Reset customer info
     setCustomerPhone("")
     setCustomerName("")
     setCustomerAddress("")
-
-    // Refresh data
     loadData()
   }
 
-  // Calculate change
+  // Calculer la monnaie à rendre
   const calculateChange = (): number => {
     if (!orderToProcess) return 0
     const received = Number.parseFloat(amountReceived) || 0
     return Math.max(0, received - orderToProcess.total)
   }
 
-  // Select a table
+  // Sélectionner une table
   const selectTable = (table: TableType) => {
     setSelectedTable(table)
 
-    // If table has an order, load it
     if (table.orderId) {
       const order = getOrderByTableId(table.id)
       if (order) {
@@ -305,7 +296,6 @@ export default function CashierInterface() {
       }
     } else {
       setCurrentOrder(null)
-      // Set up a new order for this table
       setNewOrder({
         type: "sur place",
         tableId: table.id,
@@ -316,7 +306,7 @@ export default function CashierInterface() {
     }
   }
 
-  // Create and send a new order to kitchen and process payment
+  // Créer et envoyer une nouvelle commande à la cuisine et traiter le paiement
   const handleCreateAndPayOrder = () => {
     if (newOrder.items.length === 0) {
       toast({
@@ -326,8 +316,7 @@ export default function CashierInterface() {
       })
       return
     }
-    //Réservations du jour
-    // For delivery orders, check if we have customer info
+
     if (newOrder.type === "livraison" && (!customerPhone || !customerName || !customerAddress)) {
       toast({
         title: "Informations manquantes",
@@ -337,13 +326,11 @@ export default function CashierInterface() {
       return
     }
 
-    // Create the order
     const createdOrder = createOrder({
       ...newOrder,
       status: "pending",
     })
 
-    // Notify kitchen
     notifyKitchen(createdOrder.id)
 
     toast({
@@ -351,12 +338,11 @@ export default function CashierInterface() {
       description: "La commande a été envoyée à la cuisine",
     })
 
-    // Set the order for payment and open payment dialog directly
     setOrderToProcess(createdOrder)
     setPaymentDialogOpen(true)
   }
 
-  // Reset reservation form
+  // Réinitialiser le formulaire de réservation
   const resetReservationForm = () => {
     setReservationName("")
     setReservationGuests("2")
@@ -368,61 +354,67 @@ export default function CashierInterface() {
     setIsEditingReservation(false)
   }
 
-  // Add or edit reservation
+  // Ajouter ou modifier une réservation
   const handleReservationSubmit = async () => {
     if (!date || !reservationName || !reservationTime) return
 
-    if (isEditingReservation && selectedReservation) {
-      // Update existing reservation
-      setReservations(
-        (reservations ?? []).map((res) =>
-          res.id === selectedReservation.id
-            ? {
-              ...res,
-              name: reservationName,
-              guests: Number.parseInt(reservationGuests),
-              date: date,
-              time: reservationTime,
-              phone: reservationPhone,
-              note: reservationNote,
-            }
-            : res,
-        ),
-      )
-    } else {
-      // Add new reservation
-      const newReservation = {
-        client_name: reservationName,
-        number_of_persones: Number.parseInt(reservationGuests),
-        date: date.toISOString().split('T')[0], // Use the selected date
-        hour: reservationTime,
-        client_phone: reservationPhone,
-        duration: 2,
-        note: reservationNote,
-      }
+    try {
+      if (isEditingReservation && selectedReservation) {
+        // Mettre à jour une réservation existante
+        const updatedReservation = {
+          client_name: reservationName,
+          number_of_persones: Number.parseInt(reservationGuests),
+          date: date.toISOString().split("T")[0],
+          hour: reservationTime,
+          phone_number: reservationPhone,
+          note: reservationNote,
+          tables_id: selectedTable?.id || null,
+          duration: 2, // Durée par défaut
+        }
 
-      try {
-        const response = await api.post("/reservation", newReservation)
-        console.log("Réservation ajoutée avec succès:", response.data)
-
-        // Update state with server response instead of local data
-        setReservations([...(reservations || []), response.data])
-      } catch (error) {
-        console.error("Erreur lors de l'ajout de la réservation:", error)
+        await api.put(`/reservation/${selectedReservation.id}`, updatedReservation)
         toast({
-          title: "Erreur",
-          description: "Échec de l'ajout de la réservation",
-          variant: "destructive",
+          title: "Succès",
+          description: "Réservation mise à jour avec succès",
         })
+      } else {
+        // Ajouter une nouvelle réservation
+        const newReservation = {
+          client_name: reservationName,
+          number_of_persones: Number.parseInt(reservationGuests),
+          date: date.toISOString().split("T")[0],
+          hour: reservationTime,
+          phone_number: reservationPhone,
+          note: reservationNote,
+          tables_id: selectedTable?.id || null,
+          duration: 2, // Durée par défaut
+        }
+
+        await api.post("/reservation", newReservation)
+        toast({
+          title: "Succès",
+          description: "Réservation ajoutée avec succès",
+        })
+
+        // Rafraîchir les réservations du jour si la nouvelle réservation est pour aujourd'hui
+        if (date.toDateString() === new Date().toDateString()) {
+          fetchTodayReservations()
+        }
       }
+    } catch (error) {
+      console.error("Erreur lors de l'opération sur la réservation:", error)
+      toast({
+        title: "Erreur",
+        description: "Échec de l'opération sur la réservation",
+        variant: "destructive",
+      })
     }
 
-    // Reset form
     resetReservationForm()
     setReservationDialogOpen(false)
   }
 
-  // Edit reservation
+  // Modifier une réservation
   const editReservation = (reservation: Reservation) => {
     setSelectedReservation(reservation)
     setReservationName(reservation.client_name)
@@ -430,21 +422,31 @@ export default function CashierInterface() {
     setDate(typeof reservation.date === "string" ? new Date(reservation.date) : reservation.date)
     setReservationTime(reservation.hour)
     setReservationPhone(reservation.phone_number)
-    setReservationNote(reservation.note)
+    setReservationNote(reservation.note || "")
     setIsEditingReservation(true)
     setReservationDialogOpen(true)
   }
 
-  // Delete reservation
-  const deleteReservation = (id: number) => {
-    setReservations((reservations ?? []).filter((res) => res.id !== id))
+  // Supprimer une réservation
+  const deleteReservation = async (id: number) => {
+    try {
+      await api.delete(`/reservation/${id}`)
+      fetchTodayReservations()
+      toast({
+        title: "Succès",
+        description: "Réservation supprimée avec succès",
+      })
+    } catch (error) {
+      console.error("Erreur lors de la suppression de la réservation:", error)
+      toast({
+        title: "Erreur",
+        description: "Échec de la suppression de la réservation",
+        variant: "destructive",
+      })
+    }
   }
 
-
-
-
-
-  // Get table status color
+  // Obtenir la couleur du statut de la table
   const getTableStatusColor = (status: string) => {
     switch (status) {
       case "free":
@@ -458,7 +460,7 @@ export default function CashierInterface() {
     }
   }
 
-  // Get table status text
+  // Obtenir le texte du statut de la table
   const getTableStatusText = (status: string) => {
     switch (status) {
       case "free":
@@ -472,35 +474,73 @@ export default function CashierInterface() {
     }
   }
 
-  // Filter menu items by category
-  // const filteredMenuItems =
-  //   selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
+  // Filtrer les articles du menu par catégorie
+  const filteredMenuItems =
+    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
 
-  const [todayReservations, setTodayReservations] = useState<Reservation[]>([])
-  const getReservationsForDate = async (selectedDate: Date | undefined) => {
-    if (!selectedDate) return [];
-
-    try {
-      const formattedDate = selectedDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
-      const response = await api.get(`/reservation?date=${formattedDate}`);
-      console.log("Reservations for date:", response.data);
-      return response.data || [];
-    } catch (error) {
-      console.error("Failed to fetch reservations:", error);
-      return [];
-    }
-  };
+  // Charger les réservations pour la date sélectionnée
   useEffect(() => {
-    const fetchReservations = async () => {
+    if (date && activeTab === "planning") {
+      const loadDateReservations = async () => {
+        const dateReservations = await getReservationsForDate(date)
+        const dateReservationsElement = document.getElementById("date-reservations")
 
+        if (dateReservationsElement) {
+          if (dateReservations.length > 0) {
+            dateReservationsElement.innerHTML = dateReservations
+              .map(
+                (res: Reservation) => `
+              <div class="p-2 border rounded-md flex justify-between items-center">
+                <div>
+                  <p class="font-medium">${res.client_name} (${res.number_of_persones} pers.)</p>
+                  <div class="flex items-center text-sm text-gray-500">
+                    <span class="mr-1">⏱</span>
+                    <span>${res.hour}</span>
+                    ${
+                      res.tables_id
+                        ? `
+                      <span class="mx-2">•</span>
+                      <span>Table ${res.tables_id}</span>
+                    `
+                        : ""
+                    }
+                  </div>
+                </div>
+                <button class="px-2 py-1 text-sm border rounded hover:bg-gray-100" 
+                  onclick="document.dispatchEvent(new CustomEvent('editReservation', {detail: ${res.id}}))">
+                  Modifier
+                </button>
+              </div>
+            `,
+              )
+              .join("")
+          } else {
+            dateReservationsElement.innerHTML =
+              '<p class="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>'
+          }
+        }
+      }
 
-      const reservations = await getReservationsForDate(new Date("2025-04-15"));
-      setTodayReservations(reservations);
+      loadDateReservations()
+    }
+  }, [date, activeTab])
+
+  // Écouteur d'événements pour modifier la réservation à partir du contenu dynamique
+  useEffect(() => {
+    const handleEditReservation = (e: CustomEvent) => {
+      const reservationId = e.detail
+      const reservation = todayReservations.find((r) => r.id === reservationId)
+      if (reservation) {
+        editReservation(reservation)
+      }
     }
 
-    fetchReservations()
-  }, [])
-  console.log("Today Reservations:", todayReservations)
+    document.addEventListener("editReservation", handleEditReservation as EventListener)
+    return () => {
+      document.removeEventListener("editReservation", handleEditReservation as EventListener)
+    }
+  }, [todayReservations])
+
   return (
     <div className="h-full flex flex-col">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
@@ -523,7 +563,7 @@ export default function CashierInterface() {
         </TabsList>
 
         <TabsContent value="commandes" className="flex-1 flex flex-col md:flex-row gap-4 mt-4">
-          {/* Menu Items */}
+          {/* Articles du menu */}
           <div className="w-full md:w-2/3 bg-white rounded-lg shadow-sm border border-gray-200 p-4 overflow-auto">
             <div className="mb-4">
               <div className="flex justify-between items-center mb-3">
@@ -603,7 +643,7 @@ export default function CashierInterface() {
               </div>
             </div>
 
-            {/* <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {filteredMenuItems.map((item) => (
                 <Card
                   key={item.id}
@@ -612,7 +652,7 @@ export default function CashierInterface() {
                 >
                   <div className="relative h-32 w-full">
                     <Image
-                      src={item.image || "/placeholder.svg"}
+                      src={item.image || "/placeholder.svg?height=128&width=200"}
                       alt={item.name}
                       fill
                       className="object-cover rounded-t-lg"
@@ -626,10 +666,10 @@ export default function CashierInterface() {
                   </CardContent>
                 </Card>
               ))}
-            </div> */}
+            </div>
           </div>
 
-          {/* Current Order */}
+          {/* Commande en cours */}
           <div className="w-full md:w-1/3 bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">Nouvelle commande</h3>
@@ -753,8 +793,9 @@ export default function CashierInterface() {
               {tables.map((table) => (
                 <Card
                   key={table.id}
-                  className={`cursor-pointer hover:shadow-md transition-shadow ${getTableStatusColor(table.status)} ${selectedTable?.id === table.id ? "ring-2 ring-blue-500" : ""
-                    }`}
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${getTableStatusColor(table.status)} ${
+                    selectedTable?.id === table.id ? "ring-2 ring-blue-500" : ""
+                  }`}
                   onClick={() => selectTable(table)}
                 >
                   <CardHeader className="p-3 pb-0">
@@ -763,12 +804,13 @@ export default function CashierInterface() {
                   <CardContent className="p-3 text-center">
                     <p className="text-sm">{table.seats} places</p>
                     <p
-                      className={`text-xs font-medium mt-1 ${table.status === "free"
-                        ? "text-green-600"
-                        : table.status === "occupied"
-                          ? "text-blue-600"
-                          : "text-amber-600"
-                        }`}
+                      className={`text-xs font-medium mt-1 ${
+                        table.status === "free"
+                          ? "text-green-600"
+                          : table.status === "occupied"
+                            ? "text-blue-600"
+                            : "text-amber-600"
+                      }`}
                     >
                       {getTableStatusText(table.status)}
                     </p>
@@ -793,14 +835,14 @@ export default function CashierInterface() {
                 </Card>
               ))}
             </div>
-            image
+
             <div className="mt-6 border-t pt-4">
               <h4 className="font-medium mb-3">Réservations du jour</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {todayReservations.map((reservation) => (
                   <div key={reservation.id} className="border rounded-md p-3 bg-blue-50/50">
                     <div className="flex justify-between items-start">
-                      <div>//Reservation
+                      <div>
                         <p className="font-medium">
                           {reservation.client_name} ({reservation.number_of_persones} pers.)
                         </p>
@@ -810,7 +852,7 @@ export default function CashierInterface() {
                           {reservation.tables_id && (
                             <>
                               <span className="mx-2">•</span>
-                              {<span>Table {reservation.tables_id}</span>}
+                              <span>Table {reservation.tables_id}</span>
                             </>
                           )}
                         </div>
@@ -873,41 +915,11 @@ export default function CashierInterface() {
                       <h4 className="font-medium mb-2">
                         Réservations pour {date ? format(date, "dd MMMM yyyy", { locale: fr }) : "aujourd'hui"}
                       </h4>
-                      {/* <div className="space-y-2">
-                        {getReservationsForDate(date).length > 0 ? (
-                          getReservationsForDate(date).map((reservation) => (
-                            <div
-                              key={reservation.id}
-                              className="p-2 border rounded-md flex justify-between items-center"
-                            >
-
-
-                              <div>
-                                <p className="font-medium">
-                                  {reservation.name} ({reservation.guests} pers.)
-                                </p>
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <Clock className="h-3 w-3 mr-1" />
-                                  <span>{reservation.time}</span>
-                                  {reservation.table && (
-                                    <>
-                                      <span className="mx-2">•</span>
-                                      <span>Table {reservation.table}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-1">
-                                <Button size="sm" variant="outline" onClick={() => editReservation(reservation)}>
-                                  Modifier
-                                </Button>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>
-                        )}
-                      </div> */}
+                      <div className="space-y-2" id="date-reservations">
+                        <p className="text-gray-500 text-center py-2">
+                          Sélectionnez une date pour voir les réservations
+                        </p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -965,9 +977,9 @@ export default function CashierInterface() {
                           </Popover>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="reservation-time">Heure</Label>
+                          <Label htmlFor="dialog-time">Heure</Label>
                           <Input
-                            id="reservation-time"
+                            id="dialog-time"
                             type="time"
                             value={reservationTime}
                             onChange={(e) => setReservationTime(e.target.value)}
@@ -1008,7 +1020,7 @@ export default function CashierInterface() {
         </TabsContent>
       </Tabs>
 
-      {/* Payment Dialog */}
+      {/* Dialogue de paiement */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1085,7 +1097,7 @@ export default function CashierInterface() {
         </DialogContent>
       </Dialog>
 
-      {/* Receipt Dialog */}
+      {/* Dialogue du ticket */}
       <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1169,7 +1181,7 @@ export default function CashierInterface() {
         </DialogContent>
       </Dialog>
 
-      {/* Reservation Dialog */}
+      {/* Dialogue de réservation */}
       <Dialog open={reservationDialogOpen} onOpenChange={setReservationDialogOpen}>
         <DialogContent>
           <DialogHeader>
