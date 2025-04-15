@@ -1,7 +1,7 @@
 // API service for communicating with Laravel backend
 
 // Base URL for API endpoints
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://3pejo36fix.sharedwithexpose.com/api"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://m4hh9gvofs.sharedwithexpose.com/api"
 
 // Helper function to handle API responses
 const handleResponse = async (response: Response) => {

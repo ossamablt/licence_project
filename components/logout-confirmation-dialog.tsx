@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-
+import api from "@/lib/api"
 interface LogoutConfirmationDialogProps {
   isOpen: boolean
   onClose: () => void
@@ -20,14 +20,29 @@ interface LogoutConfirmationDialogProps {
 export const LogoutConfirmationDialog: React.FC<LogoutConfirmationDialogProps> = ({ isOpen, onClose }) => {
   const router = useRouter()
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("userRole")
-    localStorage.removeItem("username")
-    localStorage.removeItem("token")
+  // Function to handle logout
 
-    router.push("/")
+  const handleLogout = async () => {
+    const token = localStorage.getItem("token")
+    if (token) {
+      try {
+        const response = await api.post("/logout")
+        if (response.status === 200) {
+          localStorage.removeItem("isLoggedIn")
+          localStorage.removeItem("userRole")
+          localStorage.removeItem("username")
+          localStorage.removeItem("token")
+          router.push("/")
+        } else {
+          console.error("Logout failed:", response.data.message)
+        }
+      }
+      catch (error) {
+        console.error("Logout error:", error)
+      }
+    }
   }
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
