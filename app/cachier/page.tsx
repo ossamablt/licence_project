@@ -19,10 +19,10 @@ export default function CashierPage() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "Caissier") {
-    router.push("/")
-    return
-    }
+    // if (!isLoggedIn || userRole !== "Caissier") {
+    // router.push("/")
+    // return
+    // }
 
     setLoading(false)
   }, [router])

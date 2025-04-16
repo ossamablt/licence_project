@@ -3,7 +3,7 @@ import axios from "axios"
 
 // Set the base URL for your API
 const api = axios.create({
-  baseURL: "https://9dzylepiiu.sharedwithexpose.com/api", // Update with the correct URL
+  baseURL: "http://laravel.test/api", // Update with the correct URL
   headers: {
     "Content-Type": "application/json",
   },

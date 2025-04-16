@@ -41,19 +41,19 @@ export interface MenuItem {
 // Menu items data
 export const menuItems: MenuItem[] = [
   { id: 1, name: "Burger Classic", category: "Burgers", price: 8.5, image: "/images/r.jpg" },
-  { id: 2, name: "Burger Cheese", category: "Burgers", price: 9.5, image: "/images/r.jpg" },
-  { id: 3, name: "Burger Double", category: "Burgers", price: 12.0, image: "/images/r.jpg" },
-  { id: 4, name: "Frites", category: "Accompagnements", price: 3.5, image: "/images/r.jpg" },
-  { id: 5, name: "Onion Rings", category: "Accompagnements", price: 4.0, image: "/images/r.jpg" },
-  { id: 6, name: "Salade", category: "Accompagnements", price: 4.5, image: "/images/r.jpg" },
-  { id: 7, name: "Coca-Cola", category: "Boissons", price: 2.5, image: "/images/r.jpg" },
-  { id: 8, name: "Eau", category: "Boissons", price: 1.5, image: "/images/r.jpg" },
-  { id: 9, name: "Bière", category: "Boissons", price: 4.0, image: "/images/r.jpg" },
-  { id: 10, name: "Glace", category: "Desserts", price: 3.5, image: "/images/r.jpg" },
-  { id: 11, name: "Brownie", category: "Desserts", price: 4.5, image: "/images/r.jpg" },
-  { id: 12, name: "Menu Enfant", category: "Menus", price: 7.5, image: "/images/r.jpg" },
-  { id: 13, name: "Menu Classique", category: "Menus", price: 12.5, image: "/images/r.jpg" },
-  { id: 14, name: "Menu Maxi", category: "Menus", price: 15.0, image: "/images/r.jpg" },
+  { id: 2, name: "Burger Cheese", category: "Burgers", price: 9.5, image: "/images/2.jpeg" },
+  { id: 3, name: "Burger Double", category: "Burgers", price: 12.0, image: "/images/3.jpeg" },
+  { id: 4, name: "Frites", category: "Accompagnements", price: 3.5, image: "/images/4.jpeg" },
+  { id: 5, name: "Onion Rings", category: "Accompagnements", price: 4.0, image: "/images/5.jpeg" },
+  { id: 6, name: "Salade", category: "Accompagnements", price: 4.5, image: "/images/6.jpeg" },
+  { id: 7, name: "Coca-Cola", category: "Boissons", price: 2.5, image: "/images/7.jpeg" },
+  { id: 8, name: "Eau", category: "Boissons", price: 1.5, image: "/images/10.jpeg" },
+  { id: 9, name: "Bière", category: "Boissons", price: 4.0, image: "/images/8.jpeg" },
+  { id: 10, name: "Glace", category: "Desserts", price: 3.5, image: "/images/12.jpeg" },
+  { id: 11, name: "Brownie", category: "Desserts", price: 4.5, image: "/images/11.jpeg" },
+  { id: 12, name: "Menu Enfant", category: "Menus", price: 7.5, image: "/images/12.jpeg" },
+  { id: 13, name: "Menu Classique", category: "Menus", price: 12.5, image: "/images/13.jpeg" },
+  { id: 14, name: "Menu Maxi", category: "Menus", price: 15.0, image: "/images/14.jpeg" },
 ]
 
 // Initial data
