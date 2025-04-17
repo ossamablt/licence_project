@@ -26,6 +26,7 @@ interface Employee {
 
 interface SalaryRecord {
   id: number
+  employee_id: number
   name: string
   role: string
   baseSalary: number
@@ -57,6 +58,7 @@ export function SalaryManagement() {
         const res = await api.get("/salaries")
         const data = res.data.map((s: any) => ({
           id: s.id,
+          employee_id: s.employe_id,
           name: s.employe?.name || `Employé ${s.employe_id}`,
           role: s.employe?.role || "-",
           baseSalary: s.amount,
@@ -121,6 +123,7 @@ export function SalaryManagement() {
       const selectedEmp = employeeOptions.find((e) => e.id === selectedEmployeeId)
       const newRecord: SalaryRecord = {
         id: res.data.id,
+        employee_id: selectedEmployeeId,
         name: selectedEmp?.name || `Employé ${selectedEmployeeId}`,
         role: selectedEmp?.role || "-",
         baseSalary: newSalaryData.baseSalary,
@@ -161,7 +164,12 @@ export function SalaryManagement() {
   }
 
   const filteredSalaries = salaries.filter((s) => {
-    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const employee = employeeOptions.find(emp => emp.id === s.employee_id)
+    const matchesSearch = 
+      (employee?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employee?.role.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.role.toLowerCase().includes(searchTerm.toLowerCase())
     if (statusFilter === "all") return matchesSearch
     return matchesSearch && s.status === statusFilter
   })
@@ -335,108 +343,115 @@ export function SalaryManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredSalaries.map((s) => (
-              <TableRow key={s.id} className="hover:bg-orange-50/50">
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell>{s.role}</TableCell>
-                <TableCell>{formatCurrency(s.baseSalary)}</TableCell>
-                <TableCell>{formatCurrency(s.bonuses)}</TableCell>
-                <TableCell>{formatCurrency(s.deductions)}</TableCell>
-                <TableCell className="font-semibold">{formatCurrency(s.netSalary)}</TableCell>
-                <TableCell>{s.lastPayment}</TableCell>
-                <TableCell>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    s.status === "Payé" ? "bg-green-100 text-green-800" :
-                    s.status === "En attente" ? "bg-yellow-100 text-yellow-800" :
-                    "bg-red-100 text-red-800"
-                  }`}>
-                    {s.status}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                          onClick={() => setEditSalary(s)}
-                        >
-                          <Pencil size={16} />
-                        </Button>
-                      </DialogTrigger>
-                      {editSalary && (
-                        <DialogContent className="sm:max-w-[425px]">
-                          <DialogHeader>
-                            <DialogTitle>Modifier le salaire</DialogTitle>
-                            <DialogDescription>
-                              Modifiez les informations pour {editSalary.name}.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label className="text-right">Salaire de base</Label>
-                              <Input
-                                type="number"
-                                value={editSalary.baseSalary}
-                                onChange={e => setEditSalary({...editSalary, baseSalary: Number(e.target.value)})}
-                                className="col-span-3"
-                              />
+            {filteredSalaries.map((s) => {
+              const employee = employeeOptions.find(emp => emp.id === s.employee_id)
+              return (
+                <TableRow key={s.id} className="hover:bg-orange-50/50">
+                  <TableCell className="font-medium">
+                    {employee ? employee.name : s.name}
+                  </TableCell>
+                  <TableCell>
+                    {employee ? employee.role : s.role}
+                  </TableCell>
+                  <TableCell>{formatCurrency(s.baseSalary)}</TableCell>
+                  <TableCell>{formatCurrency(s.bonuses)}</TableCell>
+                  <TableCell>{formatCurrency(s.deductions)}</TableCell>
+                  <TableCell className="font-semibold">{formatCurrency(s.netSalary)}</TableCell>
+                  <TableCell>{s.lastPayment}</TableCell>
+                  <TableCell>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      s.status === "Payé" ? "bg-green-100 text-green-800" :
+                      s.status === "En attente" ? "bg-yellow-100 text-yellow-800" :
+                      "bg-red-100 text-red-800"
+                    }`}>
+                      {s.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                            onClick={() => setEditSalary(s)}
+                          >
+                            <Pencil size={16} />
+                          </Button>
+                        </DialogTrigger>
+                        {editSalary && (
+                          <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                              <DialogTitle>Modifier le salaire</DialogTitle>
+                              <DialogDescription>
+                                Modifiez les informations pour {editSalary.name}.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label className="text-right">Salaire de base</Label>
+                                <Input
+                                  type="number"
+                                  value={editSalary.baseSalary}
+                                  onChange={e => setEditSalary({...editSalary, baseSalary: Number(e.target.value)})}
+                                  className="col-span-3"
+                                />
+                              </div>
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label className="text-right">Primes</Label>
+                                <Input
+                                  type="number"
+                                  value={editSalary.bonuses}
+                                  onChange={e => setEditSalary({...editSalary, bonuses: Number(e.target.value)})}
+                                  className="col-span-3"
+                                />
+                              </div>
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label className="text-right">Déductions</Label>
+                                <Input
+                                  type="number"
+                                  value={editSalary.deductions}
+                                  onChange={e => setEditSalary({...editSalary, deductions: Number(e.target.value)})}
+                                  className="col-span-3"
+                                />
+                              </div>
+                              <div className="grid grid-cols-4 items-center gap-4">
+                                <Label className="text-right">Statut</Label>
+                                <Select
+                                  value={editSalary.status}
+                                  onValueChange={v => setEditSalary({...editSalary, status: v as any})}
+                                >
+                                  <SelectTrigger className="col-span-3">
+                                    <SelectValue placeholder="Statut" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Payé">Payé</SelectItem>
+                                    <SelectItem value="En attente">En attente</SelectItem>
+                                    <SelectItem value="Retard">Retard</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label className="text-right">Primes</Label>
-                              <Input
-                                type="number"
-                                value={editSalary.bonuses}
-                                onChange={e => setEditSalary({...editSalary, bonuses: Number(e.target.value)})}
-                                className="col-span-3"
-                              />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label className="text-right">Déductions</Label>
-                              <Input
-                                type="number"
-                                value={editSalary.deductions}
-                                onChange={e => setEditSalary({...editSalary, deductions: Number(e.target.value)})}
-                                className="col-span-3"
-                              />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label className="text-right">Statut</Label>
-                              <Select
-                                value={editSalary.status}
-                                onValueChange={v => setEditSalary({...editSalary, status: v as any})}
-                              >
-                                <SelectTrigger className="col-span-3">
-                                  <SelectValue placeholder="Statut" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Payé">Payé</SelectItem>
-                                  <SelectItem value="En attente">En attente</SelectItem>
-                                  <SelectItem value="Retard">Retard</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button onClick={saveEditedSalary}>Enregistrer</Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      )}
-                    </Dialog>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                      onClick={() => handleDeleteSalary(s.id)}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                            <DialogFooter>
+                              <Button onClick={saveEditedSalary}>Enregistrer</Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        )}
+                      </Dialog>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => handleDeleteSalary(s.id)}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       </div>

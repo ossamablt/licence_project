@@ -24,13 +24,13 @@ interface Employee {
   id: number
   name: string
   role: EmployeeRole
-  hireDate: string
+  dateOfHire: string
   lastName: string
   avatar?: string
   email?: string
-  phone?: string
-  address?: string
-  salary?: number
+  phoneNumber?: string
+  addresse?: string
+
 }
 
 const getRoleIcon = (role: EmployeeRole) => {
@@ -54,11 +54,11 @@ export function EmployeeManagement() {
     name: "",
     role: "Serveur",
     lastName: "",
-    hireDate: new Date().toLocaleDateString("fr-FR"),
+    dateOfHire: new Date().toLocaleDateString("fr-FR"),
     email: "",
-    phone: "",
-    address: "",
-    salary:0,
+    phoneNumber: "",
+    addresse: "",
+ 
   })
 
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -102,11 +102,11 @@ export function EmployeeManagement() {
           name: newEmployee.name,
           role: newEmployee.role,
           lastName: newEmployee.lastName,
-          hireDate: newEmployee.hireDate,
+          dateOfHire: newEmployee.dateOfHire,
           email: newEmployee.email,
-          phone: newEmployee.phone,
-          address: newEmployee.address,
-          salary: newEmployee.salary,
+          phoneNumber: newEmployee.phoneNumber,
+          addresse: newEmployee.addresse,
+ 
         })
   
         // Update the employee locally openEditEmployee 
@@ -115,11 +115,11 @@ export function EmployeeManagement() {
         const response = await api.post("/employes", {
           name: newEmployee.name,
           lastName: newEmployee.lastName,
-          phoneNumber: newEmployee.phone,
+          phoneNumber: newEmployee.phoneNumber,
           email: newEmployee.email,
-          hireDate: newEmployee.hireDate,
-          address: newEmployee.address,
-          salary: newEmployee.salary,
+          dateOfHire: newEmployee.dateOfHire,
+          addresse: newEmployee.addresse,
+      
           role: newEmployee.role,
         })
 
@@ -127,12 +127,12 @@ export function EmployeeManagement() {
           id: response.data.id,
           name: response.data.name,
           role: response.data.role,
-          hireDate: new Date().toLocaleDateString("fr-FR"),
+          dateOfHire: new Date().toLocaleDateString("fr-FR"),
           lastName: newEmployee.lastName || "",
           email: newEmployee.email || "",
-          phone: newEmployee.phone || "",
-          address: newEmployee.address || "",
-          salary: newEmployee.salary || 0,
+          phoneNumber: newEmployee.phoneNumber || "",
+          addresse: newEmployee.addresse || "",
+    
         }
 
         setEmployees((prev) => [...prev, newEmp])
@@ -144,11 +144,11 @@ export function EmployeeManagement() {
         name: "",
         role: "Serveur",
         lastName: "",
-        hireDate: new Date().toLocaleDateString("fr-FR"),
+        dateOfHire: new Date().toLocaleDateString("fr-FR"),
         email: "",
-        phone: "",
-        address: "",
-        salary: 0,
+        phoneNumber: "",
+        addresse: "",
+   
       })
     } catch (error) {
       console.error("Erreur lors de l'ajout de l'employé", error)
@@ -161,11 +161,11 @@ export function EmployeeManagement() {
       name: employee.name,
       role: employee.role,
       lastName: employee.lastName,
-      hireDate: employee.hireDate,
+      dateOfHire: employee.dateOfHire,
       email: employee.email,
-      phone: employee.phone,
-      address: employee.address,
-      salary: employee.salary,
+      phoneNumber: employee.phoneNumber,
+      addresse: employee.addresse,
+
     })
     setIsEditMode(true)
     setAddEmployeeOpen(true)
@@ -245,11 +245,11 @@ export function EmployeeManagement() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="hireDate">Date d'embauche</Label>
+                      <Label htmlFor="dateOfHire">Date d'embauche</Label>
                       <Input
-                        id="hireDate"
-                        value={newEmployee.hireDate}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, hireDate: e.target.value })}
+                        id="dateOfHire"
+                        value={newEmployee.dateOfHire}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, dateOfHire: e.target.value })}
                         placeholder="JJ/MM/AAAA"
                       />
                     </div>
@@ -267,36 +267,28 @@ export function EmployeeManagement() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Téléphone</Label>
+                      <Label htmlFor="phoneNumber">TéléphoneNumber</Label>
                       <Input
-                        id="phone"
-                        value={newEmployee.phone}
-                        onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
+                        id="phoneNumber"
+                        value={newEmployee.phoneNumber}
+                        onChange={(e) => setNewEmployee({ ...newEmployee, phoneNumber: e.target.value })}
                         placeholder="06 XX XX XX XX"
                       />
                     </div>
                   </div>
   
                   <div className="space-y-2">
-                    <Label htmlFor="address">Adresse</Label>
+                    <Label htmlFor="addresse">Adresse</Label>
                     <Input
-                      id="address"
-                      value={newEmployee.address}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, address: e.target.value })}
+                      id="addresse"
+                      value={newEmployee.addresse}
+                      onChange={(e) => setNewEmployee({ ...newEmployee, addresse: e.target.value })}
                       placeholder="Adresse complète"
                     />
                   </div>
   
-                  <div className="space-y-2">
-                    <Label htmlFor="salary">Salaire mensuel (€)</Label>
-                    <Input
-                      id="salary"
-                      type="number"
-                      value={newEmployee.salary ||0}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, salary: Number(e.target.value) })}
-                      placeholder="0.00"
-                    />
-                  </div>
+                  
+                 
                 </div>
   
                 <DialogFooter>
@@ -399,7 +391,7 @@ export function EmployeeManagement() {
                       {employee.role}
                     </span>
                   </div>
-                  <div className="text-gray-600">{employee.hireDate}</div>
+                  <div className="text-gray-600">{employee.dateOfHire}</div>
                   <div className="flex justify-center gap-2">
                     <Button
                       variant="outline"
@@ -486,24 +478,19 @@ export function EmployeeManagement() {
                     <p>{selectedEmployee.email || "Non renseigné"}</p>
                   </div>
                   <div>
-                    <h4 className="text-sm font-medium text-gray-500">Téléphone</h4>
-                    <p>{selectedEmployee.phone || "Non renseigné"}</p>
+                    <h4 className="text-sm font-medium text-gray-500">TéléphoneNumber</h4>
+                    <p>{selectedEmployee.phoneNumber || "Non renseigné"}</p>
                   </div>
                   <div>
                     <h4 className="text-sm font-medium text-gray-500">Date d'embauche</h4>
-                    <p>{selectedEmployee.hireDate}</p>
+                    <p>{selectedEmployee.dateOfHire}</p>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-500">Salaire mensuel</h4>
-                    <p className="font-semibold">
-                      {selectedEmployee.salary ? formatPrice(selectedEmployee.salary) : "Non renseigné"}
-                    </p>
-                  </div>
+                  
                 </div>
   
                 <div>
                   <h4 className="text-sm font-medium text-gray-500">Adresse</h4>
-                  <p>{selectedEmployee.address || "Non renseignée"}</p>
+                  <p>{selectedEmployee.addresse || "Non renseignée"}</p>
                 </div>
               </div>
             )}
