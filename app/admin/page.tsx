@@ -1,8 +1,23 @@
 "use client"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+
 import { toast } from "@/hooks/use-toast"
-import { User, ChefHat, CreditCard, Coffee, Package, Bell, Info, AlertTriangle, Menu, X, LogOut } from "lucide-react"
+import {
+  User,
+  ChefHat,
+  CreditCard,
+  Coffee,
+  Package,
+  Bell,
+  Info,
+  AlertTriangle,
+  Menu,
+  X,
+  LogOut,
+  UtensilsCrossed,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { OlirabLogo } from "@/components/olirab-logo"
@@ -10,6 +25,7 @@ import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialo
 import { EmployeeManagement } from "@/components/employee-management"
 import { StockManagement } from "@/components/stock-management"
 import { AccountingManagement } from "@/components/accounting-management"
+import { MenuManagement } from "@/components/menu-management"
 
 interface Notification {
   id: number
@@ -22,7 +38,7 @@ interface Notification {
 export default function RestaurantManagement() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [activeSection, setActiveSection] = useState<"employees" | "stock" | "accounting">("employees")
+  const [activeSection, setActiveSection] = useState<"employees" | "stock" | "accounting" | "menu">("employees")
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -37,9 +53,9 @@ export default function RestaurantManagement() {
     // }
   }, [router])
 
-  // Check authentication
-  
+ 
 
+  
 
   // Check if screen is mobile
   const [isMobile, setIsMobile] = useState(false)
@@ -78,7 +94,7 @@ export default function RestaurantManagement() {
     router.push("/login")
   }
 
-  
+ 
 
   return (
     <div className="flex h-screen bg-orange-50/50 text-gray-800 relative">
@@ -142,6 +158,20 @@ export default function RestaurantManagement() {
             <CreditCard className="h-4 w-4" />
             Comptabilité
           </div>
+          <div
+            className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
+              activeSection === "menu"
+                ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
+                : "text-gray-600 hover:bg-orange-50/50"
+            }`}
+            onClick={() => {
+              setActiveSection("menu")
+              if (isMobile) setSidebarOpen(false)
+            }}
+          >
+            <UtensilsCrossed className="h-4 w-4" />
+            Menu des Plats
+          </div>
           <div className="mt-4 border-t pt-4">
             <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Interfaces</p>
             <div
@@ -171,7 +201,7 @@ export default function RestaurantManagement() {
 
       {/* Overlay for mobile sidebar */}
       {sidebarOpen && isMobile && (
-        <div className="sticky inset-0 bg-black/50 z-10" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/50 z-10" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Main content */}
@@ -185,7 +215,9 @@ export default function RestaurantManagement() {
                 ? "Gestion des Employés"
                 : activeSection === "stock"
                   ? "Gestion du Stock"
-                  : "Comptabilité"}
+                  : activeSection === "menu"
+                    ? "Menu des Plats"
+                    : "Comptabilité"}
             </h1>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
@@ -274,6 +306,8 @@ export default function RestaurantManagement() {
           <EmployeeManagement />
         ) : activeSection === "stock" ? (
           <StockManagement />
+        ) : activeSection === "menu" ? (
+          <MenuManagement />
         ) : (
           <AccountingManagement />
         )}

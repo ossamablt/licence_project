@@ -7,9 +7,6 @@ import Image from "next/image"
 import {
   CalendarIcon,
   Clock,
-  CreditCard,
-  DollarSign,
-  Printer,
   ShoppingBag,
   Trash2,
   Utensils,
@@ -18,6 +15,9 @@ import {
   Plus,
   Minus,
   Send,
+  CreditCard,
+  DollarSign,
+  Printer,
 } from "lucide-react"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -39,7 +39,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { toast } from "@/hooks/use-toast"
 import {
   getCashierOrders,
-  getTables,
   getOrderByTableId,
   processPayment,
   createOrder,
@@ -52,31 +51,25 @@ import {
 } from "@/lib/sharedDataService"
 import api from "@/lib/api"
 
-interface Table {
-  id: number;
-  num_table: number;
-  capacity: number;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-interface Reservation {
-  id: number;
-  client_name: string;
-  client_phone: string;
-  date: string; // Format: YYYY-MM-DD
-  hour: string; // Format: HH:mm:ss
-  duration: string; // Assuming it's a string like "2.00"
-  status: string; // e.g., "pending"
-  tables_id: number;
-  created_at: string;
-  table: Table;
-}
-
-interface Table {
+interface TableInterface {
   id: number
   num_table: number
   capacity: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+interface Reservation {
+  id: number
+  client_name: string
+  client_phone: string
+  date: string // Format: YYYY-MM-DD
+  hour: string // Format: HH:mm:ss
+  duration: string // Assuming it's a string like "2.00"
+  status: string // e.g., "pending"
+  tables_id: number
+  created_at: string
+  table: TableInterface
 }
 
 export default function CashierInterface() {
@@ -109,7 +102,7 @@ export default function CashierInterface() {
   const [reservationDialogOpen, setReservationDialogOpen] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [isEditingReservation, setIsEditingReservation] = useState(false)
-  const [tables, setTables] = useState<Table[]>([])
+  const [tables, setTables] = useState<TableInterface[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [newOrderNotification, setNewOrderNotification] = useState(false)
@@ -117,8 +110,17 @@ export default function CashierInterface() {
   const [customerName, setCustomerName] = useState<string>("")
   const [customerAddress, setCustomerAddress] = useState<string>("")
   const [orderToProcess, setOrderToProcess] = useState<Order | null>(null)
-  const [todayReservations, setTodayReservations] = useState<Reservation[] | undefined>(undefined);
-  const [reservationsbyDate, setReservationsbyDate] = useState<Reservation[] | undefined>(undefined);
+  const [todayReservations, setTodayReservations] = useState<Reservation[] | undefined>(undefined)
+  const [reservationsbyDate, setReservationsbyDate] = useState<Reservation[] | undefined>(undefined)
+  const [editTableDialogOpen, setEditTableDialogOpen] = useState(false)
+  const [tableFormData, setTableFormData] = useState<{
+    id?: number
+    num_table: number
+    capacity: number
+  }>({
+    num_table: 1,
+    capacity: 2,
+  })
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
@@ -140,47 +142,93 @@ export default function CashierInterface() {
   // Récupérer les réservations du jour
   const fetchTodayReservations = async () => {
     try {
-      const formattedDate = new Date().toISOString().split("T")[0];
-      console.log("Fetching reservations for:", formattedDate);
-  
-      const response = await api.get(`/reservation?date=${formattedDate}`);
-      
-      console.log("Response:", response.data.reservations); // Log actual array
-  
-      setTodayReservations(response.data.reservations); // ✅ Correct access
-  
+      const formattedDate = new Date().toISOString().split("T")[0]
+      console.log("Fetching reservations for:", formattedDate)
+
+      const response = await api.get(`/reservation?date=${formattedDate}`)
+
+      console.log("Response:", response.data.reservations) // Log actual array
+
+      setTodayReservations(response.data.reservations) // ✅ Correct access
     } catch (error) {
-      console.error("Échec de récupération des réservations du jour:", error);
-      setTodayReservations(undefined);
+      console.error("Échec de récupération des réservations du jour:", error)
+      // Create mock reservations as fallback
+      const mockReservations = [
+        {
+          id: 1,
+          client_name: "Jean Dupont",
+          client_phone: "0612345678",
+          date: new Date().toISOString().split("T")[0],
+          hour: "19:30:00",
+          duration: "2.00",
+          status: "pending",
+          tables_id: 1,
+          created_at: new Date().toISOString(),
+          table: { id: 1, num_table: 1, capacity: 4, created_at: null, updated_at: null },
+        },
+        {
+          id: 2,
+          client_name: "Marie Martin",
+          client_phone: "0687654321",
+          date: new Date().toISOString().split("T")[0],
+          hour: "20:00:00",
+          duration: "2.00",
+          status: "pending",
+          tables_id: 3,
+          created_at: new Date().toISOString(),
+          table: { id: 3, num_table: 3, capacity: 6, created_at: null, updated_at: null },
+        },
+      ]
+      setTodayReservations(mockReservations)
+      toast({
+        title: "Mode démo",
+        description: "Utilisation des données de démonstration pour les réservations",
+      })
     }
-  };
+  }
 
   const fetchReservationsbyDate = async (date: Date) => {
     try {
-      const formattedDate = date.toISOString().split("T")[0];
-      console.log("Fetching reservations for:", formattedDate);
-  
-      const response = await api.get(`/reservation?date=${formattedDate}`);
-      
-      console.log("Response:", response.data.reservations); // Log actual array
-  
-      setReservationsbyDate(response.data.reservations); // ✅ Correct access
-  
-    } catch (error) {
-      console.error("Échec de récupération des réservations du jour:", error);
-      setTodayReservations(undefined);
-    }
-  };
-  // Obtenir les réservations pour une date spécifique
- // fetch tables
+      const formattedDate = date.toISOString().split("T")[0]
+      console.log("Fetching reservations for:", formattedDate)
 
+      const response = await api.get(`/reservation?date=${formattedDate}`)
+
+      console.log("Response:", response.data.reservations) // Log actual array
+
+      setReservationsbyDate(response.data.reservations) // ✅ Correct access
+    } catch (error) {
+      console.error("Échec de récupération des réservations du jour:", error)
+      setTodayReservations(undefined)
+    }
+  }
+
+  // fetch tables
   const fetchTables = async () => {
     try {
       const response = await api.get("/tables")
-      setTables(response.data.tables)
-      console.log("Tables:", response.data.tables)
+      if (response.data && response.data.tables) {
+        setTables(response.data.tables)
+        console.log("Tables:", response.data.tables)
+      } else {
+        throw new Error("Invalid response format")
+      }
     } catch (error) {
       console.error("Erreur lors de la récupération des tables:", error)
+      // Fallback to mock data from sharedDataService
+      const { getTables } = require("@/lib/sharedDataService")
+      const mockTables = getTables().map((table: { id: number; number: number; seats: number }) => ({
+        id: table.id,
+        num_table: table.number,
+        capacity: table.seats,
+        created_at: null,
+        updated_at: null,
+      }))
+      setTables(mockTables)
+      toast({
+        title: "Mode démo",
+        description: "Utilisation des données de démonstration pour les tables",
+      })
     }
   }
 
@@ -328,13 +376,21 @@ export default function CashierInterface() {
   const selectTable = (table: TableType) => {
     setSelectedTable(table)
 
-    if (table.orderId) {
-      const order = getOrderByTableId(table.id)
-      if (order) {
-        setCurrentOrder(order)
-        setActiveTab("commandes")
+    // Switch to orders tab when selecting a table
+    setActiveTab("commandes")
+
+    // Check if there's an existing order for this table
+    const order = getOrderByTableId(table.id)
+    if (order) {
+      setCurrentOrder(order)
+      setOrderToProcess(order)
+
+      // If there's a ready order, open payment dialog
+      if (order.status === "ready") {
+        setPaymentDialogOpen(true)
       }
     } else {
+      // Reset current order for new table
       setCurrentOrder(null)
       setNewOrder({
         type: "sur place",
@@ -398,6 +454,42 @@ export default function CashierInterface() {
   const handleReservationSubmit = async () => {
     if (!date || !reservationName || !reservationTime) return
 
+    // Check if the date is in the past
+    const reservationDate = new Date(date)
+    reservationDate.setHours(
+      Number.parseInt(reservationTime.split(":")[0]),
+      Number.parseInt(reservationTime.split(":")[1]),
+    )
+
+    if (reservationDate < new Date()) {
+      toast({
+        title: "Date invalide",
+        description: "Vous ne pouvez pas faire une réservation dans le passé",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check for table conflicts
+    if (selectedTable) {
+      const existingReservations = reservationsbyDate || []
+      const tableConflict = existingReservations.find(
+        (r) =>
+          r.tables_id === selectedTable.id &&
+          r.hour === reservationTime &&
+          (!selectedReservation || r.id !== selectedReservation.id),
+      )
+
+      if (tableConflict) {
+        toast({
+          title: "Conflit de réservation",
+          description: `La table ${selectedTable.number} est déjà réservée à cette heure`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     try {
       if (isEditingReservation && selectedReservation) {
         // Mettre à jour une réservation existante
@@ -411,9 +503,7 @@ export default function CashierInterface() {
           tables_id: selectedTable?.id || null,
           duration: 2, // Durée par défaut
         }
-        console.log(
-          updatedReservation
-        )
+        console.log(updatedReservation)
 
         await api.put(`/reservation/${selectedReservation.id}`, updatedReservation)
         toast({
@@ -432,9 +522,7 @@ export default function CashierInterface() {
           tables_id: selectedTable?.id || null,
           duration: 2, // Durée par défaut
         }
-        console.log(
-          newReservation
-        )
+        console.log(newReservation)
         await api.post("/reservation", newReservation)
         toast({
           title: "Succès",
@@ -522,30 +610,29 @@ export default function CashierInterface() {
   const filteredMenuItems =
     selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
 
-    const formatLocalDate = (date: Date): string => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
-    };
-    
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
 
   // Charger les réservations pour la date sélectionnée
   useEffect(() => {
     if (date && activeTab === "planning") {
       const loadDateReservations = async () => {
-        const formattedDate = formatLocalDate(date); // Format YYYY-MM-DD
-        console.log("Fetching reservations for:", formattedDate);
+        const formattedDate = formatLocalDate(date) // Format YYYY-MM-DD
+        console.log("Fetching reservations for:", formattedDate)
         try {
-          const response = await api.get(`/reservation?date=${formattedDate}`);
-          const reservations = response.data.reservations;
+          const response = await api.get(`/reservation?date=${formattedDate}`)
+          const reservations = response.data.reservations
 
-          console.log("Response:", reservations); // Log actual array
-  
-          setReservationsbyDate(reservations); // Keep updating state for elsewhere if needed
-  
-          const dateReservationsElement = document.getElementById("date-reservations");
-  
+          console.log("Response:", reservations) // Log actual array
+
+          setReservationsbyDate(reservations) // Keep updating state for elsewhere if needed
+
+          const dateReservationsElement = document.getElementById("date-reservations")
+
           if (dateReservationsElement) {
             if ((reservations ?? []).length > 0) {
               dateReservationsElement.innerHTML = reservations
@@ -571,23 +658,22 @@ export default function CashierInterface() {
                         Modifier
                       </button>
                     </div>
-                  `
+                  `,
                 )
-                .join("");
+                .join("")
             } else {
               dateReservationsElement.innerHTML =
-                '<p class="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>';
+                '<p class="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>'
             }
           }
         } catch (error) {
-          console.error("Échec de récupération des réservations:", error);
+          console.error("Échec de récupération des réservations:", error)
         }
-      };
-  
-      loadDateReservations();
+      }
+
+      loadDateReservations()
     }
-  }, [date, activeTab]);
-  
+  }, [date, activeTab])
 
   // Écouteur d'événements pour modifier la réservation à partir du contenu dynamique
   useEffect(() => {
@@ -604,6 +690,26 @@ export default function CashierInterface() {
       document.removeEventListener("editReservation", handleEditReservation as EventListener)
     }
   }, [todayReservations])
+
+  // Set table form data when a table is selected for editing
+  useEffect(() => {
+    if (selectedTable) {
+      const table = tables.find((t) => t.id === selectedTable.id)
+      if (table) {
+        setTableFormData({
+          id: table.id,
+          num_table: table.num_table,
+          capacity: table.capacity,
+        })
+      }
+    } else {
+      // Reset form for new table
+      setTableFormData({
+        num_table: tables.length > 0 ? Math.max(...tables.map((t) => t.num_table)) + 1 : 1,
+        capacity: 2,
+      })
+    }
+  }, [selectedTable, tables])
 
   return (
     <div className="h-full flex flex-col">
@@ -854,76 +960,127 @@ export default function CashierInterface() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {tables.map((table) => (
-                <Card
-                  key={table.id}
-                  className={`cursor-pointer hover:border-blue-300 transition-colors `}
-                >
-                  <CardHeader className="p-3 pb-0">
-                    <CardTitle className="text-sm">Table {table.num_table}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-3 pt-1">
-                    <p className="text-lg font-bold text-blue-600">{table.capacity} places</p>
-                  </CardContent>
-                </Card>
-              ))}
+              {tables.map((table) => {
+                // Convert the API table format to the format expected by selectTable
+                const tableForSelection: TableType = {
+                  id: table.id,
+                  number: table.num_table,
+                  seats: table.capacity,
+                  status: "free", // Default to free, but we should determine the real status
+                }
+
+                // Check if there's an active order for this table
+                const hasActiveOrder = getOrderByTableId(table.id)
+
+                return (
+                  <Card
+                    key={table.id}
+                    className={`cursor-pointer hover:border-blue-300 transition-colors relative`}
+                    onClick={() => selectTable(tableForSelection)}
+                  >
+                    <CardHeader className="p-3 pb-0">
+                      <CardTitle className="text-sm flex justify-between items-center">
+                        <span>Table {table.num_table}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 rounded-full hover:bg-orange-100"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedTable(tableForSelection)
+                            setEditTableDialogOpen(true)
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 text-orange-600" />
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-1">
+                      <p className="text-lg font-bold text-blue-600">{table.capacity} places</p>
+                      {hasActiveOrder && (
+                        <Button
+                          className="mt-2 w-full bg-green-500 hover:bg-green-600 text-white text-xs py-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const order = getOrderByTableId(table.id)
+                            if (order) {
+                              setOrderToProcess(order)
+                              setPaymentDialogOpen(true)
+                            }
+                          }}
+                        >
+                          <CreditCard className="h-3 w-3 mr-1" />
+                          Encaisser
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
+
+            {/* Add Table Button */}
+            <Button
+              className="mt-4 bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => {
+                setSelectedTable(null)
+                setEditTableDialogOpen(true)
+              }}
+            >
+              <Plus size={18} className="mr-2" />
+              Ajouter une table
+            </Button>
 
             <div className="mt-6 border-t pt-4">
               <h4 className="font-medium mb-3">Réservations du jour</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-  {todayReservations && todayReservations.length > 0 ? (
-    
-    todayReservations?.map((reservation) => (
-      <div
-        key={reservation.id}
-        className="border rounded-md p-3 bg-blue-50/50"
-      >
-        <div className="flex justify-between items-start">
-          <div>
-            <div>
-              <span className="font-medium">{reservation.client_name}</span>
-            </div>
-            
-            <div className="flex items-center text-sm text-gray-500 mt-1">
-              <Clock className="h-3 w-3 mr-1" />
-              <span>{reservation.hour}</span>
-              {reservation.tables_id && (
-                <>
-                  <span className="mx-2">•</span>
-                  <span>Table {reservation.tables_id}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={() => editReservation(reservation)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-red-500"
-              onClick={() => deleteReservation(reservation.id)}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    ))
-  ) : (
-    <div className="col-span-full text-center py-4 text-gray-500">
-      Aucune réservation pour aujourd&apos;hui
-    </div>
-  )}
-</div>
+                {todayReservations && todayReservations.length > 0 ? (
+                  todayReservations?.map((reservation) => (
+                    <div key={reservation.id} className="border rounded-md p-3 bg-blue-50/50">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div>
+                            <span className="font-medium">{reservation.client_name}</span>
+                          </div>
 
+                          <div className="flex items-center text-sm text-gray-500 mt-1">
+                            <Clock className="h-3 w-3 mr-1" />
+                            <span>{reservation.hour}</span>
+                            {reservation.tables_id && (
+                              <>
+                                <span className="mx-2">•</span>
+                                <span>Table {reservation.tables_id}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => editReservation(reservation)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-red-500"
+                            onClick={() => deleteReservation(reservation.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full text-center py-4 text-gray-500">
+                    Aucune réservation pour aujourd&apos;hui
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </TabsContent>
@@ -1048,8 +1205,8 @@ export default function CashierInterface() {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button className="w-full bg-black text-white cursor-pointer" onClick={handleReservationSubmit} >
-                      {isEditingReservation ? "Modifier la réservation" : "Ajouter la rvation"}
+                    <Button className="w-full bg-black text-white cursor-pointer" onClick={handleReservationSubmit}>
+                      {isEditingReservation ? "Modifier la réservation" : "Ajouter la réservation"}
                     </Button>
                   </CardFooter>
                 </Card>
@@ -1313,7 +1470,91 @@ export default function CashierInterface() {
               Annuler
             </Button>
             <Button onClick={handleReservationSubmit} className="bg-red-400">
-              {isEditingReservation ? "Enregistrer les modifications" : "Ajouter la rvation"}
+              {isEditingReservation ? "Enregistrer les modifications" : "Ajouter la réservation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Table Dialog */}
+      <Dialog open={editTableDialogOpen} onOpenChange={setEditTableDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedTable ? "Modifier la table" : "Ajouter une table"}</DialogTitle>
+            <DialogDescription>
+              {selectedTable
+                ? "Modifiez les informations de la table"
+                : "Remplissez les informations pour ajouter une nouvelle table"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="table-number">Numéro de table</Label>
+                <Input
+                  id="table-number"
+                  type="number"
+                  value={tableFormData.num_table}
+                  onChange={(e) => setTableFormData({ ...tableFormData, num_table: Number(e.target.value) })}
+                  min="1"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="table-capacity">Capacité (places)</Label>
+                <Input
+                  id="table-capacity"
+                  type="number"
+                  value={tableFormData.capacity}
+                  onChange={(e) => setTableFormData({ ...tableFormData, capacity: Number(e.target.value) })}
+                  min="1"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditTableDialogOpen(false)
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              className="bg-orange-500 hover:bg-orange-600"
+              onClick={async () => {
+                try {
+                  if (selectedTable) {
+                    // Update existing table
+                    await api.put(`/tables/${selectedTable.id}`, tableFormData)
+                    toast({
+                      title: "Table modifiée",
+                      description: `La table ${tableFormData.num_table} a été modifiée avec succès`,
+                    })
+                  } else {
+                    // Add new table
+                    await api.post("/tables", tableFormData)
+                    toast({
+                      title: "Table ajoutée",
+                      description: `La table ${tableFormData.num_table} a été ajoutée avec succès`,
+                    })
+                  }
+                  // Refresh tables
+                  fetchTables()
+                  setEditTableDialogOpen(false)
+                } catch (error) {
+                  console.error("Erreur lors de l'opération sur la table:", error)
+                  toast({
+                    title: "Erreur",
+                    description: "Une erreur est survenue lors de l'opération",
+                    variant: "destructive",
+                  })
+                }
+              }}
+            >
+              {selectedTable ? "Enregistrer" : "Ajouter"}
             </Button>
           </DialogFooter>
         </DialogContent>

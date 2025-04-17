@@ -58,4 +58,3 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ message = "Chargem
     </div>
   )
 }
-

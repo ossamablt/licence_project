@@ -102,6 +102,12 @@ export const mockMenuItems = [
   },
 ]
 
+export const menuItems = [
+  // Add mock data for menu items here
+  { id: 1, name: "Burger", category: "burgers" },
+  { id: 2, name: "Fries", category: "sides" },
+  { id: 3, name: "Coke", category: "drinks" },
+];
 // Mock orders
 export const mockOrders = [
   {

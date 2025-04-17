@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,9 +15,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Pencil, Plus, Trash2, Download, Filter, Search } from "lucide-react"
+import { Download, Filter, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import api from "@/lib/api"
 
 interface Employee {
+  id: number
+  name: string
+  role: string
+}
+
+interface SalaryRecord {
   id: number
   name: string
   role: string
@@ -29,154 +36,135 @@ interface Employee {
   status: "Payé" | "En attente" | "Retard"
 }
 
-// Sample data
-const initialEmployees: Employee[] = [
-  {
-    id: 1,
-    name: "MR.Zenir",
-    role: "Manager",
-    baseSalary: 3200,
-    bonuses: 500,
-    deductions: 200,
-    netSalary: 3500,
-    lastPayment: "25/02/2023",
-    status: "Payé",
-  },
-  {
-    id: 2,
-    name: "Abd Arrahim",
-    role: "Serveur",
-    baseSalary: 1800,
-    bonuses: 150,
-    deductions: 100,
-    netSalary: 1850,
-    lastPayment: "25/02/2023",
-    status: "Payé",
-  },
-  {
-    id: 3,
-    name: "Ossamablt",
-    role: "Chef Cuisine",
-    baseSalary: 2500,
-    bonuses: 300,
-    deductions: 150,
-    netSalary: 2650,
-    lastPayment: "25/02/2023",
-    status: "Payé",
-  },
-  {
-    id: 4,
-    name: "Rauf",
-    role: "Caissier",
-    baseSalary: 1700,
-    bonuses: 100,
-    deductions: 80,
-    netSalary: 1720,
-    lastPayment: "25/02/2023",
-    status: "Payé",
-  },
-  {
-    id: 5,
-    name: "Sophie Martin",
-    role: "Serveur",
-    baseSalary: 1800,
-    bonuses: 0,
-    deductions: 100,
-    netSalary: 1700,
-    lastPayment: "25/02/2023",
-    status: "En attente",
-  },
-  {
-    id: 6,
-    name: "Thomas Dubois",
-    role: "Chef Cuisine",
-    baseSalary: 2400,
-    bonuses: 0,
-    deductions: 150,
-    netSalary: 2250,
-    lastPayment: "25/01/2023",
-    status: "Retard",
-  },
-]
-
 export function SalaryManagement() {
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
+  const [salaries, setSalaries] = useState<SalaryRecord[]>([])
+  const [employeeOptions, setEmployeeOptions] = useState<Employee[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [editEmployee, setEditEmployee] = useState<Employee | null>(null)
+  const [editSalary, setEditSalary] = useState<SalaryRecord | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [newEmployee, setNewEmployee] = useState<Partial<Employee>>({
-    name: "",
-    role: "",
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null)
+  const [newSalaryData, setNewSalaryData] = useState({
     baseSalary: 0,
     bonuses: 0,
     deductions: 0,
     status: "En attente",
   })
 
-  // Filter employees based on search term and status
-  const filteredEmployees = employees.filter((employee) => {
-    const matchesSearch =
-      employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.role.toLowerCase().includes(searchTerm.toLowerCase())
-
-    if (statusFilter === "all") return matchesSearch
-    return matchesSearch && employee.status === statusFilter
-  })
-
-  // Calculate total salary expenses
-  const totalSalaryExpenses = employees.reduce((total, emp) => total + emp.netSalary, 0)
-
-  // Handle employee deletion
-  const handleDeleteEmployee = (id: number) => {
-    setEmployees(employees.filter((emp) => emp.id !== id))
-  }
-
-  // Handle employee edit
-  const handleEditEmployee = (employee: Employee) => {
-    setEditEmployee(employee)
-  }
-
-  // Save edited employee
-  const saveEditedEmployee = () => {
-    if (editEmployee) {
-      setEmployees(employees.map((emp) => (emp.id === editEmployee.id ? editEmployee : emp)))
-      setEditEmployee(null)
-    }
-  }
-
-  // Add new employee
-  const addNewEmployee = () => {
-    const netSalary = (newEmployee.baseSalary || 0) + (newEmployee.bonuses || 0) - (newEmployee.deductions || 0)
-
-    const employee: Employee = {
-      id: employees.length + 1,
-      name: newEmployee.name || "",
-      role: newEmployee.role || "",
-      baseSalary: newEmployee.baseSalary || 0,
-      bonuses: newEmployee.bonuses || 0,
-      deductions: newEmployee.deductions || 0,
-      netSalary: netSalary,
-      lastPayment: "N/A",
-      status: (newEmployee.status as "Payé" | "En attente" | "Retard") || "En attente",
+  useEffect(() => {
+    const fetchSalaries = async () => {
+      try {
+        const res = await api.get("/salaries")
+        const data = res.data.map((s: any) => ({
+          id: s.id,
+          name: s.employe?.name || `Employé ${s.employe_id}`,
+          role: s.employe?.role || "-",
+          baseSalary: s.amount,
+          bonuses: s.primes,
+          deductions: s.deduction,
+          netSalary: s.total,
+          lastPayment: s.last_payment_date || "N/A",
+          status:
+            s.status === "paid"
+              ? "Payé"
+              : s.status === "pending"
+              ? "En attente"
+              : "Retard",
+        }))
+        setSalaries(data)
+      } catch (err) {
+        console.error("Erreur lors du chargement des salaires", err)
+      }
     }
 
-    setEmployees([...employees, employee])
-    setNewEmployee({
-      name: "",
-      role: "",
-      baseSalary: 0,
-      bonuses: 0,
-      deductions: 0,
-      status: "En attente",
-    })
-    setIsAddDialogOpen(false)
-  }
+    const fetchEmployees = async () => {
+      try {
+        const res = await api.get("/employes")
+        setEmployeeOptions(res.data.employes)
+      } catch (err) {
+        console.error("Erreur lors du chargement des employés", err)
+      }
+    }
 
-  // Format currency
+    fetchSalaries()
+    fetchEmployees()
+  }, [])
+
+  const totalSalaryExpenses = salaries.reduce((sum, s) => sum + s.netSalary, 0)
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(amount)
   }
+
+  const handleDeleteSalary = async (id: number) => {
+    try {
+      await api.delete(`/salaries/${id}`)
+      setSalaries((prev) => prev.filter((s) => s.id !== id))
+    } catch (err) {
+      console.error("Erreur lors de la suppression du salaire", err)
+    }
+  }
+
+  const addNewSalary = async () => {
+    if (!selectedEmployeeId) return
+    const netSalary = newSalaryData.baseSalary + newSalaryData.bonuses - newSalaryData.deductions
+    try {
+      const res = await api.post("/salaries", {
+        employe_id: selectedEmployeeId,
+        amount: newSalaryData.baseSalary,
+        primes: newSalaryData.bonuses,
+        deduction: newSalaryData.deductions,
+        status: newSalaryData.status === "Payé" ? "paid" : "pending",
+        payment_method: "cash",
+        last_payment_date: new Date().toISOString().split("T")[0],
+      })
+
+      const selectedEmp = employeeOptions.find((e) => e.id === selectedEmployeeId)
+      const newRecord: SalaryRecord = {
+        id: res.data.id,
+        name: selectedEmp?.name || `Employé ${selectedEmployeeId}`,
+        role: selectedEmp?.role || "-",
+        baseSalary: newSalaryData.baseSalary,
+        bonuses: newSalaryData.bonuses,
+        deductions: newSalaryData.deductions,
+        netSalary,
+        lastPayment: new Date().toISOString().split("T")[0],
+        status: newSalaryData.status as "Payé" | "En attente" | "Retard",
+      }
+
+      setSalaries([...salaries, newRecord])
+      setSelectedEmployeeId(null)
+      setNewSalaryData({ baseSalary: 0, bonuses: 0, deductions: 0, status: "En attente" })
+      setIsAddDialogOpen(false)
+    } catch (err) {
+      console.error("Erreur lors de l'ajout du salaire", err)
+    }
+  }
+
+  const saveEditedSalary = async () => {
+    if (!editSalary) return
+    try {
+      await api.put(`/salaries/${editSalary.id}`, {
+        amount: editSalary.baseSalary,
+        primes: editSalary.bonuses,
+        deduction: editSalary.deductions,
+        status: editSalary.status === "Payé" ? "paid" : "pending",
+      })
+
+      const netSalary = editSalary.baseSalary + editSalary.bonuses - editSalary.deductions
+      setSalaries((prev) =>
+        prev.map((s) => s.id === editSalary.id ? { ...editSalary, netSalary } : s)
+      )
+      setEditSalary(null)
+    } catch (err) {
+      console.error("Erreur lors de la mise à jour du salaire", err)
+    }
+  }
+
+  const filteredSalaries = salaries.filter((s) => {
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase())
+    if (statusFilter === "all") return matchesSearch
+    return matchesSearch && s.status === statusFilter
+  })
 
   return (
     <div className="space-y-6">
@@ -189,15 +177,15 @@ export function SalaryManagement() {
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-orange-100">
           <p className="text-sm text-gray-500">Nombre d'Employés</p>
-          <p className="text-2xl font-bold mt-1">{employees.length}</p>
+          <p className="text-2xl font-bold mt-1">{employeeOptions.length}</p>
           <div className="flex justify-between text-sm text-gray-500 mt-1">
-            <span>Actifs: {employees.filter((e) => e.status !== "Retard").length}</span>
-            <span>En retard: {employees.filter((e) => e.status === "Retard").length}</span>
+            <span>Actifs: {employeeOptions.length - salaries.filter(s => s.status === "Retard").length}</span>
+            <span>En retard: {salaries.filter(s => s.status === "Retard").length}</span>
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border border-orange-100">
           <p className="text-sm text-gray-500">Salaire Moyen</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(totalSalaryExpenses / (employees.length || 1))}</p>
+          <p className="text-2xl font-bold mt-1">{formatCurrency(totalSalaryExpenses / (employeeOptions.length || 1))}</p>
           <p className="text-sm text-gray-500 mt-1">Par employé</p>
         </div>
       </div>
@@ -209,38 +197,33 @@ export function SalaryManagement() {
             <DialogTrigger asChild>
               <Button className="bg-orange-500 hover:bg-orange-600 text-white">
                 <Plus size={18} className="mr-2" />
-                Ajouter un employé
+                Ajouter un salaire
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>Ajouter un nouvel employé</DialogTitle>
+                <DialogTitle>Ajouter un salaire</DialogTitle>
                 <DialogDescription>
-                  Remplissez les informations pour ajouter un nouvel employé au système de paie.
+                  Remplissez les informations pour ajouter un nouveau salaire.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right">
-                    Nom
+                  <Label htmlFor="employee" className="text-right">
+                    Employé
                   </Label>
-                  <Input
-                    id="name"
-                    value={newEmployee.name}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                    className="col-span-3"
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="role" className="text-right">
-                    Rôle
-                  </Label>
-                  <Input
-                    id="role"
-                    value={newEmployee.role}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
-                    className="col-span-3"
-                  />
+                  <Select onValueChange={v => setSelectedEmployeeId(Number(v))}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Sélectionner un employé" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employeeOptions.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id.toString()}>
+                          {emp.name} — {emp.role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="baseSalary" className="text-right">
@@ -249,8 +232,8 @@ export function SalaryManagement() {
                   <Input
                     id="baseSalary"
                     type="number"
-                    value={newEmployee.baseSalary}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, baseSalary: Number(e.target.value) })}
+                    value={newSalaryData.baseSalary}
+                    onChange={e => setNewSalaryData({...newSalaryData, baseSalary: Number(e.target.value)})}
                     className="col-span-3"
                   />
                 </div>
@@ -261,8 +244,8 @@ export function SalaryManagement() {
                   <Input
                     id="bonuses"
                     type="number"
-                    value={newEmployee.bonuses}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, bonuses: Number(e.target.value) })}
+                    value={newSalaryData.bonuses}
+                    onChange={e => setNewSalaryData({...newSalaryData, bonuses: Number(e.target.value)})}
                     className="col-span-3"
                   />
                 </div>
@@ -273,8 +256,8 @@ export function SalaryManagement() {
                   <Input
                     id="deductions"
                     type="number"
-                    value={newEmployee.deductions}
-                    onChange={(e) => setNewEmployee({ ...newEmployee, deductions: Number(e.target.value) })}
+                    value={newSalaryData.deductions}
+                    onChange={e => setNewSalaryData({...newSalaryData, deductions: Number(e.target.value)})}
                     className="col-span-3"
                   />
                 </div>
@@ -283,13 +266,11 @@ export function SalaryManagement() {
                     Statut
                   </Label>
                   <Select
-                    value={newEmployee.status as string}
-                    onValueChange={(value) =>
-                      setNewEmployee({ ...newEmployee, status: value as "Payé" | "En attente" | "Retard" })
-                    }
+                    value={newSalaryData.status}
+                    onValueChange={v => setNewSalaryData({...newSalaryData, status: v as any})}
                   >
                     <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Sélectionner un statut" />
+                      <SelectValue placeholder="Statut" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Payé">Payé</SelectItem>
@@ -300,9 +281,7 @@ export function SalaryManagement() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" onClick={addNewEmployee}>
-                  Ajouter
-                </Button>
+                <Button onClick={addNewSalary}>Enregistrer</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -315,12 +294,12 @@ export function SalaryManagement() {
 
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
             <Input
-              placeholder="Rechercher un employé..."
+              placeholder="Rechercher un salaire..."
               className="w-full sm:w-64 pl-10 border-gray-200"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={e => setSearchTerm(e.target.value)}
             />
           </div>
 
@@ -339,7 +318,7 @@ export function SalaryManagement() {
         </div>
       </div>
 
-      {/* Employees Table */}
+      {/* Salaries Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-orange-100">
         <Table>
           <TableHeader>
@@ -356,27 +335,22 @@ export function SalaryManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEmployees.map((employee) => (
-              <TableRow key={employee.id} className="hover:bg-orange-50/50">
-                <TableCell className="font-medium">{employee.name}</TableCell>
-                <TableCell>{employee.role}</TableCell>
-                <TableCell>{formatCurrency(employee.baseSalary)}</TableCell>
-                <TableCell>{formatCurrency(employee.bonuses)}</TableCell>
-                <TableCell>{formatCurrency(employee.deductions)}</TableCell>
-                <TableCell className="font-semibold">{formatCurrency(employee.netSalary)}</TableCell>
-                <TableCell>{employee.lastPayment}</TableCell>
+            {filteredSalaries.map((s) => (
+              <TableRow key={s.id} className="hover:bg-orange-50/50">
+                <TableCell className="font-medium">{s.name}</TableCell>
+                <TableCell>{s.role}</TableCell>
+                <TableCell>{formatCurrency(s.baseSalary)}</TableCell>
+                <TableCell>{formatCurrency(s.bonuses)}</TableCell>
+                <TableCell>{formatCurrency(s.deductions)}</TableCell>
+                <TableCell className="font-semibold">{formatCurrency(s.netSalary)}</TableCell>
+                <TableCell>{s.lastPayment}</TableCell>
                 <TableCell>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    ${
-                      employee.status === "Payé"
-                        ? "bg-green-100 text-green-800"
-                        : employee.status === "En attente"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {employee.status}
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    s.status === "Payé" ? "bg-green-100 text-green-800" :
+                    s.status === "En attente" ? "bg-yellow-100 text-yellow-800" :
+                    "bg-red-100 text-red-800"
+                  }`}>
+                    {s.status}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
@@ -387,75 +361,55 @@ export function SalaryManagement() {
                           variant="outline"
                           size="icon"
                           className="h-8 w-8 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                          onClick={() => handleEditEmployee(employee)}
+                          onClick={() => setEditSalary(s)}
                         >
                           <Pencil size={16} />
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                          <DialogTitle>Modifier les informations de salaire</DialogTitle>
-                          <DialogDescription>
-                            Modifiez les informations de salaire pour {employee.name}.
-                          </DialogDescription>
-                        </DialogHeader>
-                        {editEmployee && (
+                      {editSalary && (
+                        <DialogContent className="sm:max-w-[425px]">
+                          <DialogHeader>
+                            <DialogTitle>Modifier le salaire</DialogTitle>
+                            <DialogDescription>
+                              Modifiez les informations pour {editSalary.name}.
+                            </DialogDescription>
+                          </DialogHeader>
                           <div className="grid gap-4 py-4">
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="edit-baseSalary" className="text-right">
-                                Salaire de base
-                              </Label>
+                              <Label className="text-right">Salaire de base</Label>
                               <Input
-                                id="edit-baseSalary"
                                 type="number"
-                                value={editEmployee.baseSalary}
-                                onChange={(e) =>
-                                  setEditEmployee({ ...editEmployee, baseSalary: Number(e.target.value) })
-                                }
+                                value={editSalary.baseSalary}
+                                onChange={e => setEditSalary({...editSalary, baseSalary: Number(e.target.value)})}
                                 className="col-span-3"
                               />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="edit-bonuses" className="text-right">
-                                Primes
-                              </Label>
+                              <Label className="text-right">Primes</Label>
                               <Input
-                                id="edit-bonuses"
                                 type="number"
-                                value={editEmployee.bonuses}
-                                onChange={(e) => setEditEmployee({ ...editEmployee, bonuses: Number(e.target.value) })}
+                                value={editSalary.bonuses}
+                                onChange={e => setEditSalary({...editSalary, bonuses: Number(e.target.value)})}
                                 className="col-span-3"
                               />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="edit-deductions" className="text-right">
-                                Déductions
-                              </Label>
+                              <Label className="text-right">Déductions</Label>
                               <Input
-                                id="edit-deductions"
                                 type="number"
-                                value={editEmployee.deductions}
-                                onChange={(e) =>
-                                  setEditEmployee({ ...editEmployee, deductions: Number(e.target.value) })
-                                }
+                                value={editSalary.deductions}
+                                onChange={e => setEditSalary({...editSalary, deductions: Number(e.target.value)})}
                                 className="col-span-3"
                               />
                             </div>
                             <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="edit-status" className="text-right">
-                                Statut
-                              </Label>
+                              <Label className="text-right">Statut</Label>
                               <Select
-                                value={editEmployee.status}
-                                onValueChange={(value) =>
-                                  setEditEmployee({
-                                    ...editEmployee,
-                                    status: value as "Payé" | "En attente" | "Retard",
-                                  })
-                                }
+                                value={editSalary.status}
+                                onValueChange={v => setEditSalary({...editSalary, status: v as any})}
                               >
                                 <SelectTrigger className="col-span-3">
-                                  <SelectValue placeholder="Sélectionner un statut" />
+                                  <SelectValue placeholder="Statut" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="Payé">Payé</SelectItem>
@@ -465,19 +419,17 @@ export function SalaryManagement() {
                               </Select>
                             </div>
                           </div>
-                        )}
-                        <DialogFooter>
-                          <Button type="submit" onClick={saveEditedEmployee}>
-                            Enregistrer
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
+                          <DialogFooter>
+                            <Button onClick={saveEditedSalary}>Enregistrer</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      )}
                     </Dialog>
                     <Button
                       variant="outline"
                       size="icon"
                       className="h-8 w-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                      onClick={() => handleDeleteEmployee(employee.id)}
+                      onClick={() => handleDeleteSalary(s.id)}
                     >
                       <Trash2 size={16} />
                     </Button>
@@ -491,4 +443,3 @@ export function SalaryManagement() {
     </div>
   )
 }
-
