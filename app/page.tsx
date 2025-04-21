@@ -16,8 +16,6 @@ import {
 } from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
 import { motion } from "framer-motion"
-import { User } from 'lucide-react';
-
 export default function LoginPage() {
   const router = useRouter()
   const [username, setUsername] = useState("")
@@ -59,9 +57,6 @@ export default function LoginPage() {
 
 
       let data = response.data
-
-
-
 
       console.log("Login successful:", response.data)
 

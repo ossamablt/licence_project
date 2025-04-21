@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import api from "@/lib/api"
 
 
-type EmployeeRole = "Serveur" | "Caissier" | "Chef Cuisine" | "Manager" | "Autre"
+type EmployeeRole = "Serveur" | "Caissier" | "Cuisinier" 
 
 interface Employee {
   id: number
@@ -35,7 +35,7 @@ interface Employee {
 
 const getRoleIcon = (role: EmployeeRole) => {
   switch (role) {
-    case "Chef Cuisine": return <ChefHat className="h-4 w-4" />
+    case "Cuisinier": return <ChefHat className="h-4 w-4" />
     case "Caissier": return <CreditCard className="h-4 w-4" />
     case "Serveur": return <Coffee className="h-4 w-4" />
     default: return <User className="h-4 w-4" />
@@ -238,7 +238,7 @@ export function EmployeeManagement() {
                         <SelectContent>
                           <SelectItem value="Serveur">Serveur</SelectItem>
                           <SelectItem value="Caissier">Caissier</SelectItem>
-                          <SelectItem value="Chef Cuisine">Chef Cuisine</SelectItem>
+                          <SelectItem value="Cuisinier">Cuisinier</SelectItem>
                           <SelectItem value="Manager">Manager</SelectItem>
                           <SelectItem value="Autre">Autre</SelectItem>
                         </SelectContent>
@@ -332,7 +332,7 @@ export function EmployeeManagement() {
                 Caissiers
               </TabsTrigger>
               <TabsTrigger
-                value="chef cuisine"
+                value="Cuisinier"
                 className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
               >
                 <ChefHat className="h-4 w-4 mr-2" />
@@ -378,7 +378,7 @@ export function EmployeeManagement() {
                     <span
                       className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
                       ${
-                        employee.role === "Chef Cuisine"
+                        employee.role === "Cuisinier"
                           ? "bg-yellow-100 text-yellow-800"
                           : employee.role === "Serveur"
                             ? "bg-orange-100 text-orange-800"
@@ -456,7 +456,7 @@ export function EmployeeManagement() {
                       <span
                         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
                         ${
-                          selectedEmployee.role === "Chef Cuisine"
+                          selectedEmployee.role === "Cuisinier"
                             ? "bg-yellow-100 text-yellow-800"
                             : selectedEmployee.role === "Serveur"
                               ? "bg-orange-100 text-orange-800"
