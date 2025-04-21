@@ -222,9 +222,9 @@ export function SalaryManagement() {
                   </Label>
                   <Select onValueChange={v => setSelectedEmployeeId(Number(v))}>
                     <SelectTrigger className="col-span-3">
-                      <SelectValue placeholder="Sélectionner un employé" />
+                      <SelectValue  placeholder="Sélectionner un employé" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className=" bg-orange-100">
                       {employeeOptions.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id.toString()}>
                           {emp.name} — {emp.role}

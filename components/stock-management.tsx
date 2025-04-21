@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Pencil, Plus, Trash2, UtensilsCrossed, Package, Coffee, Store, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
+ 
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,20 +16,21 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import api from "@/lib/api"
 
-type StockCategory = "Ingrédients" | "Boissons" | "Emballages" | "Autre"
+type StockCategory = "Ingrédients" | "Boissons" 
 
 interface Product {
   id: number
   name: string
-  price: number
-  quantity: number
+  unit_price: number
+  current_quantity: number
+  minimum_quantity: number
+  type: StockCategory
+  expiration_date?: string
   supplier: string
-  category: StockCategory
-  minStock?: number
-  description?: string
-  lastRestock?: string
-  expiryDate?: string
+
+  last_restock?: string
 }
 
 export function StockManagement() {
@@ -38,120 +39,105 @@ export function StockManagement() {
   const [addProductOpen, setAddProductOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [products, setProducts] = useState<Product[]>([])
 
-  // Form states
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: "",
-    price: 0,
-    quantity: 0,
+    unit_price: 0,
+    current_quantity: 0,
+    minimum_quantity: 0,
+    type: "Ingrédients",
     supplier: "",
-    category: "Ingrédients",
-    minStock: 0,
-    description: "",
-    lastRestock: new Date().toLocaleDateString("fr-FR"),
-    expiryDate: "",
+
+    expiration_date: "",
   })
 
-  // État des produits
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: 1,
-      name: "Pain burger",
-      price: 0.5,
-      quantity: 500,
-      supplier: "Boulangerie Express",
-      category: "Ingrédients",
-      minStock: 100,
-      description: "Pains briochés pour burgers, format standard",
-      lastRestock: "15/02/2023",
-      expiryDate: "15/03/2023",
-    },
-    
-  ])
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await api.get("/products")
+        // Handle paginated response if needed
+        const data = Array.isArray(response.data) 
+          ? response.data 
+          : response.data.data || []
+        setProducts(data)
+      } catch (error) {
+        console.error("Error fetching products:", error)
+        setProducts([])
+      }
+    }
+    fetchProducts()
+  }, [])
 
-  // Filtrer les produits
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = products.filter((product): product is Product => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.supplier.toLowerCase().includes(searchTerm.toLowerCase())
 
     if (activeTab === "all") return matchesSearch
-    return matchesSearch && product.category.toLowerCase() === activeTab.toLowerCase()
+    return matchesSearch && product.type.toLowerCase() === activeTab.toLowerCase()
   })
 
-  // Fonctions de suppression
-  const deleteProduct = (id: number) => {
-    setProducts(products.filter((prod) => prod.id !== id))
-  }
-
-  // Ajouter ou modifier un produit
-  const handleProductSubmit = () => {
-    if (isEditMode && selectedProduct) {
-      // Mode modification
-      setProducts(
-        products.map((prod) => (prod.id === selectedProduct.id ? { ...selectedProduct, ...newProduct } : prod)),
-      )
-    } else {
-      // Mode ajout
-      const id = products.length > 0 ? Math.max(...products.map((p) => p.id)) + 1 : 1
-
-      const product: Product = {
-        id,
-        name: newProduct.name || "",
-        price: newProduct.price || 0,
-        quantity: newProduct.quantity || 0,
-        supplier: newProduct.supplier || "",
-        category: (newProduct.category as StockCategory) || "Ingrédients",
-        minStock: newProduct.minStock,
-        description: newProduct.description,
-        lastRestock: newProduct.lastRestock,
-        expiryDate: newProduct.expiryDate,
-      }
-
-      setProducts([...products, product])
+  const deleteProduct = async (id: number) => {
+    try {
+      await api.delete(`/products/${id}`)
+      setProducts(prev => prev.filter(prod => prod.id !== id))
+    } catch (error) {
+      console.error("Error deleting product:", error)
     }
-
-    setAddProductOpen(false)
-    setIsEditMode(false)
-    setNewProduct({
-      name: "",
-      price: 0,
-      quantity: 0,
-      supplier: "",
-      category: "Ingrédients",
-      minStock: 0,
-      description: "",
-      lastRestock: new Date().toLocaleDateString("fr-FR"),
-      expiryDate: "",
-    })
   }
 
-  // Ouvrir le formulaire d'édition de produit
+  const handleProductSubmit = async () => {
+    try {
+      if (isEditMode && selectedProduct) {
+        const response = await api.put(`/products/${selectedProduct.id}`, newProduct)
+        setProducts(prev => prev.map(prod => 
+          prod.id === selectedProduct.id ? response.data : prod
+        ))
+      } else {
+        const response = await api.post("/products", newProduct)
+        setProducts(prev => [...prev, response.data])
+      }
+      setAddProductOpen(false)
+      setIsEditMode(false)
+      resetForm()
+    } catch (error) {
+      console.error("Error saving product:", error)
+    }
+  }
+
   const openEditProduct = (product: Product) => {
     setSelectedProduct(product)
     setNewProduct({
-      name: product.name,
-      price: product.price,
-      quantity: product.quantity,
-      supplier: product.supplier,
-      category: product.category,
-      minStock: product.minStock,
-      description: product.description,
-      lastRestock: product.lastRestock,
-      expiryDate: product.expiryDate,
+      ...product,
+      expiration_date: product.expiration_date?.split("T")[0]
     })
     setIsEditMode(true)
     setAddProductOpen(true)
   }
 
-  // Formatter le prix
+  const resetForm = () => {
+    setNewProduct({
+      name: "",
+      unit_price: 0,
+      current_quantity: 0,
+      minimum_quantity: 0,
+      type: "Ingrédients",
+      supplier: "",
+    
+      expiration_date: "",
+    })
+  }
+
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(price)
+    return new Intl.NumberFormat("fr-FR", { 
+      style: "currency", 
+      currency: "EUR" 
+    }).format(price)
   }
 
   return (
     <>
-      {/* Search and add - Stock */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div className="flex items-center gap-2">
           <Dialog open={addProductOpen} onOpenChange={setAddProductOpen}>
@@ -164,11 +150,7 @@ export function StockManagement() {
             <DialogContent className="sm:max-w-[550px]">
               <DialogHeader>
                 <DialogTitle>{isEditMode ? "Modifier le produit" : "Ajouter un nouveau produit"}</DialogTitle>
-                <DialogDescription>
-                  {isEditMode
-                    ? "Modifiez les informations du produit."
-                    : "Remplissez les informations pour ajouter un nouveau produit au stock."}
-                </DialogDescription>
+                
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -182,12 +164,12 @@ export function StockManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="category">Catégorie</Label>
+                    <Label htmlFor="type">Catégorie</Label>
                     <Select
-                      value={newProduct.category as string}
-                      onValueChange={(value) => setNewProduct({ ...newProduct, category: value as StockCategory })}
+                      value={newProduct.type}
+                      onValueChange={(value) => setNewProduct({ ...newProduct, type: value as StockCategory })}
                     >
-                      <SelectTrigger id="category">
+                      <SelectTrigger id="type">
                         <SelectValue placeholder="Sélectionner une catégorie" />
                       </SelectTrigger>
                       <SelectContent>
@@ -202,23 +184,23 @@ export function StockManagement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="price">Prix unitaire (€)</Label>
+                    <Label htmlFor="unit_price">Prix unitaire (€)</Label>
                     <Input
-                      id="price"
+                      id="unit_price"
                       type="number"
                       step="0.01"
-                      value={newProduct.price}
-                      onChange={(e) => setNewProduct({ ...newProduct, price: Number(e.target.value) })}
+                      value={newProduct.unit_price}
+                      onChange={(e) => setNewProduct({ ...newProduct, unit_price: Number(e.target.value) })}
                       placeholder="0.00"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantité</Label>
+                    <Label htmlFor="current_quantity">Quantité</Label>
                     <Input
-                      id="quantity"
+                      id="current_quantity"
                       type="number"
-                      value={newProduct.quantity}
-                      onChange={(e) => setNewProduct({ ...newProduct, quantity: Number(e.target.value) })}
+                      value={newProduct.current_quantity}
+                      onChange={(e) => setNewProduct({ ...newProduct, current_quantity: Number(e.target.value) })}
                       placeholder="0"
                     />
                   </div>
@@ -226,12 +208,12 @@ export function StockManagement() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="minStock">Stock minimum</Label>
+                    <Label htmlFor="minimum_quantity">Stock minimum</Label>
                     <Input
-                      id="minStock"
+                      id="minimum_quantity"
                       type="number"
-                      value={newProduct.minStock}
-                      onChange={(e) => setNewProduct({ ...newProduct, minStock: Number(e.target.value) })}
+                      value={newProduct.minimum_quantity}
+                      onChange={(e) => setNewProduct({ ...newProduct, minimum_quantity: Number(e.target.value) })}
                       placeholder="0"
                     />
                   </div>
@@ -246,33 +228,15 @@ export function StockManagement() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Input
-                    id="description"
-                    value={newProduct.description}
-                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                    placeholder="Description du produit"
-                  />
-                </div>
-
+                
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="lastRestock">Dernière réception</Label>
+                    <Label htmlFor="expiration_date">Date d'expiration</Label>
                     <Input
-                      id="lastRestock"
-                      value={newProduct.lastRestock}
-                      onChange={(e) => setNewProduct({ ...newProduct, lastRestock: e.target.value })}
-                      placeholder="JJ/MM/AAAA"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="expiryDate">Date d'expiration</Label>
-                    <Input
-                      id="expiryDate"
-                      value={newProduct.expiryDate}
-                      onChange={(e) => setNewProduct({ ...newProduct, expiryDate: e.target.value })}
-                      placeholder="JJ/MM/AAAA"
+                      id="expiration_date"
+                      type="date"
+                      value={newProduct.expiration_date}
+                      onChange={(e) => setNewProduct({ ...newProduct, expiration_date: e.target.value })}
                     />
                   </div>
                 </div>
@@ -283,6 +247,7 @@ export function StockManagement() {
                   onClick={() => {
                     setAddProductOpen(false)
                     setIsEditMode(false)
+                    resetForm()
                   }}
                 >
                   Annuler
@@ -331,7 +296,6 @@ export function StockManagement() {
         </Tabs>
       </div>
 
-      {/* Table - Stock */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
         <div className="grid grid-cols-6 bg-orange-50 text-gray-600 font-medium p-4 border-b border-orange-100">
           <div>Produit</div>
@@ -354,9 +318,9 @@ export function StockManagement() {
                 <div className="flex items-center gap-3">
                   <div
                     className={`p-2 rounded-lg ${
-                      product.quantity === 0
+                      product.current_quantity === 0
                         ? "bg-red-100 text-red-700"
-                        : product.quantity <= (product.minStock || 0)
+                        : product.current_quantity <= product.minimum_quantity
                           ? "bg-yellow-100 text-yellow-700"
                           : "bg-green-100 text-green-700"
                     }`}
@@ -365,22 +329,22 @@ export function StockManagement() {
                   </div>
                   <span className="font-medium">{product.name}</span>
                 </div>
-                <div className="text-gray-600">{formatPrice(product.price)}</div>
+                <div className="text-gray-600">{formatPrice(product.unit_price)}</div>
                 <div className="flex items-center gap-2">
                   <span
                     className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium
                     ${
-                      product.quantity === 0
+                      product.current_quantity === 0
                         ? "bg-red-100 text-red-800"
-                        : product.quantity <= (product.minStock || 0)
+                        : product.current_quantity <= product.minimum_quantity
                           ? "bg-yellow-100 text-yellow-800"
                           : "bg-green-100 text-green-800"
                     }`}
                   >
-                    {product.quantity} unités
+                    {product.current_quantity} unités
                   </span>
                 </div>
-                <div className="text-gray-600">{product.minStock} unités</div>
+                <div className="text-gray-600">{product.minimum_quantity} unités</div>
                 <div className="flex items-center gap-2">
                   <Store className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-600">{product.supplier}</span>
