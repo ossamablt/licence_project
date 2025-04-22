@@ -1,14 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Pencil, Plus, Trash2, UtensilsCrossed, Package, Coffee, Store, Info } from "lucide-react"
+import { Pencil, Plus, Trash2, UtensilsCrossed, Package, Coffee, Store, Info, Fish } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
- 
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -18,18 +17,19 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import api from "@/lib/api"
 
-type StockCategory = "Ingrédients" | "Boissons" 
-
+type Productcategory = "ingredient" | "boisson" 
+type ProductType = "perishable" | "non_perishable"
+//boisson
 interface Product {
   id: number
   name: string
   unit_price: number
   current_quantity: number
   minimum_quantity: number
-  type: StockCategory
+  type: ProductType
   expiration_date?: string
-  supplier: string
-
+  fournisseur: string
+  category: Productcategory
   last_restock?: string
 }
 
@@ -46,9 +46,9 @@ export function StockManagement() {
     unit_price: 0,
     current_quantity: 0,
     minimum_quantity: 0,
-    type: "Ingrédients",
-    supplier: "",
-
+    type: "non_perishable",
+    category: "ingredient",
+    fournisseur: "",
     expiration_date: "",
   })
 
@@ -56,7 +56,6 @@ export function StockManagement() {
     const fetchProducts = async () => {
       try {
         const response = await api.get("/products")
-        // Handle paginated response if needed
         const data = Array.isArray(response.data) 
           ? response.data 
           : response.data.data || []
@@ -72,10 +71,10 @@ export function StockManagement() {
   const filteredProducts = products.filter((product): product is Product => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.supplier.toLowerCase().includes(searchTerm.toLowerCase())
+      product.fournisseur.toLowerCase().includes(searchTerm.toLowerCase())
 
     if (activeTab === "all") return matchesSearch
-    return matchesSearch && product.type.toLowerCase() === activeTab.toLowerCase()
+    return matchesSearch && product.category.toLowerCase() === activeTab.toLowerCase()
   })
 
   const deleteProduct = async (id: number) => {
@@ -122,9 +121,9 @@ export function StockManagement() {
       unit_price: 0,
       current_quantity: 0,
       minimum_quantity: 0,
-      type: "Ingrédients",
-      supplier: "",
-    
+      type: "non_perishable",
+      category: "ingredient",
+      fournisseur: "",
       expiration_date: "",
     })
   }
@@ -150,7 +149,6 @@ export function StockManagement() {
             <DialogContent className="sm:max-w-[550px]">
               <DialogHeader>
                 <DialogTitle>{isEditMode ? "Modifier le produit" : "Ajouter un nouveau produit"}</DialogTitle>
-                
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -164,25 +162,40 @@ export function StockManagement() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="type">Catégorie</Label>
+                    <Label htmlFor="category">Catégorie</Label>
                     <Select
-                      value={newProduct.type}
-                      onValueChange={(value) => setNewProduct({ ...newProduct, type: value as StockCategory })}
+                      value={newProduct.category}
+                      onValueChange={(value) => setNewProduct({ ...newProduct, category: value as Productcategory })}
                     >
-                      <SelectTrigger id="type">
+                      <SelectTrigger id="category">
                         <SelectValue placeholder="Sélectionner une catégorie" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Ingrédients">Ingrédients</SelectItem>
-                        <SelectItem value="Boissons">Boissons</SelectItem>
-                        <SelectItem value="Emballages">Emballages</SelectItem>
-                        <SelectItem value="Autre">Autre</SelectItem>
+                        <SelectItem value="ingredient">ingredient</SelectItem>
+                  
+                        <SelectItem value="boisson">boisson</SelectItem>
+
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select
+                      value={newProduct.type}
+                      onValueChange={(value) => setNewProduct({ ...newProduct, type: value as ProductType })}
+                    >
+                      <SelectTrigger id="type">
+                        <SelectValue placeholder="Sélectionner un type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="perishable">Périssable</SelectItem>
+                        <SelectItem value="non_perishable">Non périssable</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="unit_price">Prix unitaire (€)</Label>
                     <Input
@@ -194,6 +207,9 @@ export function StockManagement() {
                       placeholder="0.00"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="current_quantity">Quantité</Label>
                     <Input
@@ -204,9 +220,6 @@ export function StockManagement() {
                       placeholder="0"
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="minimum_quantity">Stock minimum</Label>
                     <Input
@@ -217,28 +230,29 @@ export function StockManagement() {
                       placeholder="0"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="supplier">Fournisseur</Label>
+                    <Label htmlFor="fournisseur">Fournisseur</Label>
                     <Input
-                      id="supplier"
-                      value={newProduct.supplier}
-                      onChange={(e) => setNewProduct({ ...newProduct, supplier: e.target.value })}
+                      id="fournisseur"
+                      value={newProduct.fournisseur}
+                      onChange={(e) => setNewProduct({ ...newProduct, fournisseur: e.target.value })}
                       placeholder="Nom du fournisseur"
                     />
                   </div>
-                </div>
-
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="expiration_date">Date d'expiration</Label>
-                    <Input
-                      id="expiration_date"
-                      type="date"
-                      value={newProduct.expiration_date}
-                      onChange={(e) => setNewProduct({ ...newProduct, expiration_date: e.target.value })}
-                    />
-                  </div>
+                  {newProduct.type === "perishable" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="expiration_date">Date d'expiration</Label>
+                      <Input
+                        id="expiration_date"
+                        type="date"
+                        value={newProduct.expiration_date}
+                        onChange={(e) => setNewProduct({ ...newProduct, expiration_date: e.target.value })}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
@@ -275,22 +289,29 @@ export function StockManagement() {
               Tous
             </TabsTrigger>
             <TabsTrigger
-              value="ingrédients"
+              value="ingredient"
               className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
             >
               <UtensilsCrossed className="h-4 w-4 mr-2" />
-              Ingrédients
-            </TabsTrigger>
-            <TabsTrigger value="boissons" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
-              <Coffee className="h-4 w-4 mr-2" />
-              Boissons
+              ingredient
             </TabsTrigger>
             <TabsTrigger
-              value="emballages"
+              value="poisson"
+              className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
+            >
+              <Fish className="h-4 w-4 mr-2" />
+              Poisson
+            </TabsTrigger>
+            <TabsTrigger value="boisson" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
+              <Coffee className="h-4 w-4 mr-2" />
+              boisson
+            </TabsTrigger>
+            <TabsTrigger
+              value="emballage"
               className="data-[state=active]:bg-orange-500 data-[state=active]:text-white"
             >
               <Package className="h-4 w-4 mr-2" />
-              Emballages
+              Emballage
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -347,7 +368,7 @@ export function StockManagement() {
                 <div className="text-gray-600">{product.minimum_quantity} unités</div>
                 <div className="flex items-center gap-2">
                   <Store className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-600">{product.supplier}</span>
+                  <span className="text-gray-600">{product.fournisseur}</span>
                 </div>
                 <div className="flex justify-center gap-2">
                   <Button
