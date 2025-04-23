@@ -1,4 +1,6 @@
+import { LoadingScreen } from "@/components/loading-screen"
+
 export default function Loading() {
-  return null
+  return <LoadingScreen message="Chargement de l'interface d'administration..." />
 }
 
