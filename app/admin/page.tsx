@@ -289,7 +289,7 @@ export default function RestaurantManagement() {
             <div className="hidden md:flex items-center gap-2">
               <p className="text-gray-600">Bienvenue</p>
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/placeholder.svg?height=40&width=40" />
+                <AvatarImage src="/admin.jpeg?height=40&width=40" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
               </Avatar>
               <span className="font-medium">{localStorage.getItem("username") || "Gérant"}</span>

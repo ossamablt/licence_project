@@ -20,6 +20,7 @@ import { toast } from "@/hooks/use-toast"
 import notificationService from "@/lib/notificationService"
 import { mockTables, mockMenuItems } from "@/lib/mockData"
 import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
 
 interface MenuItem {
@@ -89,7 +90,11 @@ export default function ServerInterface() {
     // Subscribe to order updates
     const orderUpdateSubscription = notificationService.subscribe("order.updated", (data) => {
       setOrders((prevOrders) =>
-        prevOrders.map((order) => (order.id === data.id ? { ...order, status: data.status } : order)),
+        prevOrders.map((order) =>
+          order.id === data.id
+            ? { ...order, status: data.status as "pending" | "preparing" | "ready" | "completed" }
+            : order
+        ),
       )
     })
 
@@ -244,7 +249,7 @@ export default function ServerInterface() {
       updatedOrders = [...orders, newOrder]
     }
 
-    setOrders(updatedOrders)
+    setOrders(updatedOrders as TableOrder[])
     setSharedOrders(updatedOrders)
 
     // Notify kitchen via notification service
@@ -368,7 +373,10 @@ export default function ServerInterface() {
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
               <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-                <User className="h-4 w-4" />
+              <Avatar className="h-10 w-10 border-2 border-orange-100">
+                <AvatarImage src="/server.jpeg?height=40&width=40" />
+                <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
+              </Avatar>
               </div>
               <span className="font-medium">Serveur</span>
             </div>

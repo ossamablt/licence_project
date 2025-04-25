@@ -51,7 +51,7 @@ export default function CashierPage() {
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
               <Avatar className="h-8 w-8 border-2 border-orange-100">
-                <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                <AvatarImage src="/cashier.jpeg?height=32&width=32" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">CA</AvatarFallback>
               </Avatar>
               <span className="font-medium">Caissier</span>

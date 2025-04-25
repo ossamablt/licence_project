@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast"
 import notificationService from "@/lib/notificationService"
 import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
-
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 // Types
 interface MenuItem {
   id: number
@@ -179,9 +179,13 @@ export default function KitchenInterface() {
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
               <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
-                <User className="h-4 w-4" />
+              <Avatar className="h-10 w-10 border-2 border-orange-100">
+                <AvatarImage src="/cuisiner.jpeg?height=40&width=40" />
+               
+              </Avatar>
               </div>
               <span className="font-medium">Cuisine</span>
+              
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
               <LogOut className="h-5 w-5" />
