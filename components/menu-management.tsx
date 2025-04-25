@@ -25,10 +25,9 @@ interface MenuItem {
 
 const categoryMap: { [key: number]: string } = {
   1: "Burgers",
-  2: "Accompagnements",
-  3: "Boissons",
-  4: "Desserts",
-  5: "Menus",
+  2: "Boisson",
+  3: "Desserts",
+  4: "krepes",
 }
 
 export function MenuManagement() {
@@ -49,7 +48,7 @@ export function MenuManagement() {
     is_available: true,
     imageUrl: "/placeholder.svg",
   })
-
+//Catégorie
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
 
   useEffect(() => {
@@ -202,10 +201,10 @@ export function MenuManagement() {
                   <div className="space-y-2">
                     <Label htmlFor="category">Catégorie</Label>
                     <Select value={newItem.catégory_id.toString()} onValueChange={(value) => setNewItem({ ...newItem, catégory_id: parseInt(value) })}>
-                      <SelectTrigger id="category">
+                      <SelectTrigger id="category" >
                         <SelectValue placeholder="Sélectionner une catégorie" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className=" bg-orange-100">
                         {Object.entries(categoryMap).map(([id, name]) => (
                           <SelectItem key={id} value={id}>{name}</SelectItem>
                         ))}
@@ -267,7 +266,13 @@ export function MenuManagement() {
                 <Button variant="outline" onClick={() => { setAddItemOpen(false); setIsEditMode(false) }}>
                   Annuler
                 </Button>
-                <Button onClick={handleMenuItemSubmit} className="bg-orange-500 hover:bg-orange-600">
+                <Button
+                  onClick={() => {
+                    handleMenuItemSubmit();
+                    setIsEditMode(false);
+                  }}
+                  className="bg-orange-500 hover:bg-orange-600"
+                >
                   {isEditMode ? "Enregistrer" : "Ajouter"}
                 </Button>
               </DialogFooter>
@@ -292,7 +297,7 @@ export function MenuManagement() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredItems.map((item) => (
-          <Card key={item.id} className={`overflow-hidden hover:shadow-md transition-shadow ${!item.is_available ? "opacity-60" : ""}`}>
+          <Card key={item.id} className={`overflow-hidden hover:shadow-md transition-shadow ${!item.is_available ? "opacity-500" : ""}`}>
             <div className="relative h-48 w-full">
               <Image
                 src={item.imageUrl}
@@ -304,11 +309,7 @@ export function MenuManagement() {
                   (e.target as HTMLImageElement).src = '/placeholder.svg'
                 }}
               />
-              {!item.is_available && (
-                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                  <span className="text-white font-bold px-2 py-1 bg-red-500 rounded">Indisponible</span>
-                </div>
-              )}
+             
             </div>
             <CardContent className="p-4">
               <div className="flex justify-between items-start mb-2">
