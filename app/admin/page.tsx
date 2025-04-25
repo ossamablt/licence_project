@@ -91,9 +91,6 @@ export default function RestaurantManagement() {
     localStorage.removeItem("username")
     router.push("/login")
   }
-
- 
-
   return (
     <div className="flex h-screen bg-orange-50/50 text-gray-800 relative">
       {/* Mobile menu button */}
