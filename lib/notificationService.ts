@@ -1,7 +1,7 @@
+
 import { toast } from "@/hooks/use-toast"
 import { mockOrders } from "./mockData"
-
-// Simple pub/sub system for frontend-only version
+import api from "@/lib/api"
 
 type NotificationType =
   | "order.new"
@@ -10,8 +10,11 @@ type NotificationType =
   | "order.paid"
   | "kitchen.notification"
   | "cashier.notification"
+  | "stock.low"
+  | "stock.expiring"
+
 type NotificationHandler = (data: any) => void
-type NotificationChannel = "server" | "kitchen" | "cashier" | "global"
+type NotificationChannel = "server" | "kitchen" | "cashier" | "global" | "manager"
 
 // Singleton to store shared state across components
 let sharedOrders = [...mockOrders]
@@ -31,18 +34,18 @@ class NotificationService {
   private userRole: string | null = null
   private channels: NotificationChannel[] = []
 
-  // Initialize connection
   connect() {
     if (typeof window === "undefined") return
     this.userRole = localStorage.getItem("userRole")
 
-    // Define which channels this role should listen to
     if (this.userRole === "server") {
       this.channels = ["server", "global"]
     } else if (this.userRole === "kitchen") {
       this.channels = ["kitchen", "global"]
     } else if (this.userRole === "cashier") {
       this.channels = ["cashier", "global"]
+    } else if (this.userRole === "Gérant") {
+      this.channels = ["manager", "global"]
     } else {
       this.channels = ["global"]
     }
@@ -54,13 +57,11 @@ class NotificationService {
     return this
   }
 
-  // Disconnect
   disconnect() {
     this.connected = false
     console.log("Notification service disconnected")
   }
 
-  // Subscribe to a notification type
   subscribe(type: NotificationType, handler: NotificationHandler): string {
     if (!this.subscribers[type]) {
       this.subscribers[type] = {}
@@ -71,24 +72,20 @@ class NotificationService {
     return id
   }
 
-  // Unsubscribe from notifications
   unsubscribe(type: NotificationType, id: string) {
     if (this.subscribers[type] && this.subscribers[type]![id]) {
       delete this.subscribers[type]![id]
     }
   }
 
-  // Publish a notification
   publish(type: NotificationType, data: any, channel: NotificationChannel = "global") {
     console.log(`Publishing ${type} to ${channel}:`, data)
 
-    // For demo purposes, we'll simulate echo back from the server
     setTimeout(() => {
       this.notifySubscribers(type, { ...data, sentFrom: this.userRole })
     }, 500)
   }
 
-  // Notify all subscribers of a certain type
   private notifySubscribers(type: NotificationType, data: any) {
     const subscribers = this.subscribers[type]
     if (subscribers) {
@@ -98,20 +95,51 @@ class NotificationService {
     }
   }
 
-  // For demo purposes only - simulate incoming notifications
+  private async fetchStockNotifications() {
+    try {
+      const response = await api.get('/notifications/stock')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching stock notifications:', error)
+      return []
+    }
+  }
+
+  private async handleStockNotifications() {
+    if (this.userRole === 'Gérant') {
+      setInterval(async () => {
+        const notifications = await this.fetchStockNotifications()
+        notifications.forEach((notification: any) => {
+          this.publish(
+            notification.type === 'low_stock' ? 'stock.low' : 'stock.expiring',
+            notification,
+            'manager'
+          )
+
+          toast({
+            title: notification.type === 'low_stock'
+              ? 'Stock Faible'
+              : 'Produit Périssable',
+            description: notification.message,
+            variant: notification.type === 'low_stock' ? 'destructive' : 'default'
+          })
+        })
+      }, 60000)
+    }
+  }
+
   private simulateIncomingNotifications() {
-    // Only setup for certain roles
+    this.handleStockNotifications()
+
     if (!this.userRole || !this.connected) return
 
     const orderStatuses = ["pending", "preparing", "ready", "completed"]
 
-    // Simulate different notifications based on role
     if (this.userRole === "kitchen" && this.channels.includes("kitchen")) {
-      // Kitchen occasionally gets new orders
       setInterval(() => {
         if (Math.random() > 0.7) {
           const mockOrder = {
-            id: Math.floor(Math.random() * 100) + 100, // High ID to avoid conflicts
+            id: Math.floor(Math.random() * 100) + 100,
             tableNumber: Math.floor(Math.random() * 8) + 1,
             items: [{ name: "Shawarma Algérienne", quantity: 1 }],
             status: "pending",
@@ -124,15 +152,14 @@ class NotificationService {
             description: `Table ${mockOrder.tableNumber}: Shawarma Algérienne`,
           })
         }
-      }, 60000) // Once a minute chance of new order
+      }, 60000)
     }
 
     if (this.userRole === "server" && this.channels.includes("server")) {
-      // Server gets order status updates
       setInterval(() => {
         if (Math.random() > 0.7) {
           const mockOrderUpdate = {
-            id: Math.floor(Math.random() * 100) + 100, // High ID to avoid conflicts
+            id: Math.floor(Math.random() * 100) + 100,
             tableNumber: Math.floor(Math.random() * 8) + 1,
             status: orderStatuses[Math.floor(Math.random() * orderStatuses.length)],
           }
@@ -152,15 +179,14 @@ class NotificationService {
             }`,
           })
         }
-      }, 45000) // Every 45 seconds chance of order update
+      }, 45000)
     }
 
     if (this.userRole === "cashier" && this.channels.includes("cashier")) {
-      // Cashier gets ready orders
       setInterval(() => {
         if (Math.random() > 0.7) {
           const mockOrderReady = {
-            id: Math.floor(Math.random() * 100) + 100, // High ID to avoid conflicts
+            id: Math.floor(Math.random() * 100) + 100,
             tableNumber: Math.floor(Math.random() * 8) + 1,
             total: Math.floor(Math.random() * 50) + 10,
           }
@@ -172,7 +198,7 @@ class NotificationService {
             description: `Table ${mockOrderReady.tableNumber}: ${mockOrderReady.total}€`,
           })
         }
-      }, 70000) // Every 70 seconds chance of payment notification
+      }, 70000)
     }
   }
 }
@@ -181,4 +207,3 @@ class NotificationService {
 const notificationService = new NotificationService()
 
 export default notificationService
-

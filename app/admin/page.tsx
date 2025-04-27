@@ -24,13 +24,19 @@ import { EmployeeManagement } from "@/components/employee-management"
 import { StockManagement } from "@/components/stock-management"
 import { AccountingManagement } from "@/components/accounting-management"
 import { MenuManagement } from "@/components/menu-management"
+import api from "@/lib/api"
 
 interface Notification {
-  id: number
-  type: "warning" | "info" | "error"
+  id: string
+  type: "low_stock" | "expiring_soon"
   message: string
-  date: string
-  read: boolean
+  created_at: string
+  read_at: string | null
+  data: {
+    product_id: number
+    product_name: string
+    expiry_date?: string
+  }
 }
 
 export default function RestaurantManagement() {
@@ -42,30 +48,13 @@ export default function RestaurantManagement() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
 
-  useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
-    const userRole = localStorage.getItem("userRole")
-
-    // if (!isLoggedIn || userRole !== "Gérant") {
-    //   router.push("/");
-    // }
-  }, [router])
-
- 
-
-  
-
-  // Check if screen is mobile
   const [isMobile, setIsMobile] = useState(false)
 
+  // Handle screen resize
   useEffect(() => {
     const checkIfMobile = () => {
       setIsMobile(window.innerWidth < 768)
-      if (window.innerWidth < 768) {
-        setSidebarOpen(false)
-      } else {
-        setSidebarOpen(true)
-      }
+      setSidebarOpen(window.innerWidth >= 768)
     }
 
     checkIfMobile()
@@ -76,21 +65,63 @@ export default function RestaurantManagement() {
     }
   }, [])
 
-  // Count unread notifications
-  const unreadCount = notifications.filter((n) => !n.read).length
+  // Check login and role
+  useEffect(() => {
+    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
+    const userRole = localStorage.getItem("userRole")
 
-  // Marquer toutes les notifications comme lues
-  const markAllNotificationsAsRead = () => {
-    setNotifications(notifications.map((n) => ({ ...n, read: true })))
+    if (!isLoggedIn || userRole !== "Gérant") {
+      router.push("/")
+    }
+  }, [router])
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    try {
+      const response = await api.get("/notifications")
+      setNotifications(response.data)
+    } catch (error) {
+      console.error("Error fetching notifications:", error)
+    }
   }
 
-  // Handle logout
+  useEffect(() => {
+    fetchNotifications()
+    const interval = setInterval(fetchNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Mark a notification as read
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      await api.post(`/notifications/${id}/mark-read`)
+      setNotifications(prev =>
+        prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n)
+      )
+    } catch (error) {
+      console.error("Error marking notification read:", error)
+    }
+  }
+
+  // Mark all notifications as read
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await api.post("/notifications/mark-all-read")
+      setNotifications(prev => prev.map(n => ({ ...n, read_at: new Date().toISOString() })))
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error)
+    }
+  }
+
+  const unreadCount = notifications.filter(n => !n.read_at).length
+
   const handleLogout = () => {
     localStorage.removeItem("isLoggedIn")
     localStorage.removeItem("userRole")
     localStorage.removeItem("username")
     router.push("/login")
   }
+
   return (
     <div className="flex h-screen bg-orange-50/50 text-gray-800 relative">
       {/* Mobile menu button */}
@@ -101,188 +132,66 @@ export default function RestaurantManagement() {
       </div>
 
       {/* Sidebar */}
-      <div
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md`}
-      >
+      <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md`}>
         <div className="p-6 border-b">
           <OlirabLogo size="lg" />
         </div>
         <div className="mt-4">
           <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Menu</p>
-          <div
-            className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
-              activeSection === "employees"
-                ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
-                : "text-gray-600 hover:bg-orange-50/50"
-            }`}
-            onClick={() => {
-              setActiveSection("employees")
-              if (isMobile) setSidebarOpen(false)
-            }}
-          >
-            <User className="h-4 w-4" />
-            Employés
-          </div>
-          <div
-            className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
-              activeSection === "stock"
-                ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
-                : "text-gray-600 hover:bg-orange-50/50"
-            }`}
-            onClick={() => {
-              setActiveSection("stock")
-              if (isMobile) setSidebarOpen(false)
-            }}
-          >
-            <Package className="h-4 w-4" />
-            Stock
-          </div>
-          <div
-            className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
-              activeSection === "accounting"
-                ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
-                : "text-gray-600 hover:bg-orange-50/50"
-            }`}
-            onClick={() => {
-              setActiveSection("accounting")
-              if (isMobile) setSidebarOpen(false)
-            }}
-          >
-            <CreditCard className="h-4 w-4" />
-            Comptabilité
-          </div>
-          <div
-            className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
-              activeSection === "menu"
-                ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
-                : "text-gray-600 hover:bg-orange-50/50"
-            }`}
-            onClick={() => {
-              setActiveSection("menu")
-              if (isMobile) setSidebarOpen(false)
-            }}
-          >
-            <UtensilsCrossed className="h-4 w-4" />
-            Menu des Plats
-          </div>
+          {["employees", "stock", "accounting", "menu"].map(section => (
+            <div
+              key={section}
+              className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
+                activeSection === section
+                  ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
+                  : "text-gray-600 hover:bg-orange-50/50"
+              }`}
+              onClick={() => {
+                setActiveSection(section as any)
+                if (isMobile) setSidebarOpen(false)
+              }}
+            >
+              {section === "employees" && <User className="h-4 w-4" />}
+              {section === "stock" && <Package className="h-4 w-4" />}
+              {section === "accounting" && <CreditCard className="h-4 w-4" />}
+              {section === "menu" && <UtensilsCrossed className="h-4 w-4" />}
+              {section.charAt(0).toUpperCase() + section.slice(1)}
+            </div>
+          ))}
           <div className="mt-4 border-t pt-4">
             <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Interfaces</p>
-            <div
-              className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50"
-              onClick={() => router.push("/server")}
-            >
+            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/server")}>
               <Coffee className="h-4 w-4" />
               Serveur
             </div>
-            <div
-              className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50"
-              onClick={() => router.push("/kitchen")}
-            >
+            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/kitchen")}>
               <ChefHat className="h-4 w-4" />
               Cuisine
             </div>
-            <div
-              className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50"
-              onClick={() => router.push("/cashier")}
-            >
+            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/cashier")}>
               <CreditCard className="h-4 w-4" />
-              Caisse
+              Caissier
             </div>
           </div>
         </div>
       </div>
 
-      {/* Overlay for mobile sidebar */}
-      {sidebarOpen && isMobile && (
-        <div className="fixed inset-0 bg-black/50 z-10" onClick={() => setSidebarOpen(false)} />
-      )}
-
       {/* Main content */}
-      <div className={`flex-1 p-4 md:p-8 overflow-auto ${isMobile ? "ml-0" : ""} pt-16 md:pt-8`}>
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <p className="text-gray-400 text-sm">Dashboard</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              {activeSection === "employees"
-                ? "Gestion des Employés"
-                : activeSection === "stock"
-                  ? "Gestion du Stock"
-                  : activeSection === "menu"
-                    ? "Menu des Plats"
-                    : "Comptabilité"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            {/* Notification Bell */}
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="icon"
-                className="relative"
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-
-              {/* Notification Panel */}
-              {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg z-50 border border-gray-200">
-                  <div className="p-3 border-b flex justify-between items-center">
-                    <h3 className="font-semibold">Notifications</h3>
-                    {unreadCount > 0 && (
-                      <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={markAllNotificationsAsRead}>
-                        Tout marquer comme lu
-                      </Button>
-                    )}
-                  </div>
-                  <div className="max-h-80 overflow-auto">
-                    {notifications.length > 0 ? (
-                      notifications.map((notification) => (
-                        <div key={notification.id} className="p-3 border-b hover:bg-gray-50 cursor-default">
-                          <div className="flex gap-3 items-start">
-                            <div
-                              className={`p-2 rounded-full 
-                              ${
-                                notification.type === "error"
-                                  ? "bg-red-100 text-red-600"
-                                  : notification.type === "warning"
-                                    ? "bg-yellow-100 text-yellow-600"
-                                    : "bg-orange-100 text-orange-600"
-                              }`}
-                            >
-                              {notification.type === "error" ? (
-                                <AlertTriangle className="h-4 w-4" />
-                              ) : notification.type === "warning" ? (
-                                <AlertTriangle className="h-4 w-4" />
-                              ) : (
-                                <Info className="h-4 w-4" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <p className={`text-sm font-medium ${!notification.read ? "font-bold" : ""}`}>
-                                {notification.message}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">{notification.date}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-4 text-center text-gray-500">Aucune notification</div>
-                    )}
-                  </div>
-                </div>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">
+            {activeSection === "employees" && "Gestion des Employés"}
+            {activeSection === "stock" && "Gestion du Stock"}
+            {activeSection === "accounting" && "Gestion Comptable"}
+            {activeSection === "menu" && "Gestion du Menu"}
+          </h1>
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => setNotificationsOpen(!notificationsOpen)}>
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 ml-1">{unreadCount}</span>
               )}
-            </div>
-
+            </Button>
             <div className="hidden md:flex items-center gap-2">
               <p className="text-gray-600">Bienvenue</p>
               <Avatar className="h-10 w-10 border-2 border-orange-100">
@@ -291,27 +200,67 @@ export default function RestaurantManagement() {
               </Avatar>
               <span className="font-medium">{localStorage.getItem("username") || "Gérant"}</span>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
-              <LogOut className="h-5 w-5" />
+            <Button variant="destructive" onClick={() => setShowLogoutConfirmation(true)}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
             </Button>
           </div>
         </div>
 
-        {activeSection === "employees" ? (
-          <EmployeeManagement />
-        ) : activeSection === "stock" ? (
-          <StockManagement />
-        ) : activeSection === "menu" ? (
-          <MenuManagement />
-        ) : (
-          <AccountingManagement />
+        {/* Sections */}
+        {activeSection === "employees" && <EmployeeManagement />}
+        {activeSection === "stock" && <StockManagement />}
+        {activeSection === "accounting" && <AccountingManagement />}
+        {activeSection === "menu" && <MenuManagement />}
+
+        {/* Notifications Drawer */}
+        {notificationsOpen && (
+          <div className="absolute top-20 right-20 w-80 bg-white shadow-lg rounded-lg overflow-hidden z-50">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="font-semibold">Notifications</h2>
+              <Button size="sm" variant="ghost" onClick={markAllNotificationsAsRead}>
+                Mark all as read
+              </Button>
+            </div>
+            {notifications.length > 0 ? (
+              notifications.map(notification => (
+                <div
+                  key={notification.id}
+                  className="p-3 border-b hover:bg-gray-50 cursor-pointer"
+                  onClick={() => markNotificationAsRead(notification.id)}
+                >
+                  <div className="flex gap-3 items-start">
+                    <div
+                      className={`p-2 rounded-full ${
+                        notification.type === "low_stock" ? "bg-red-100 text-red-600" : "bg-yellow-100 text-yellow-600"
+                      }`}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${!notification.read_at ? "font-bold" : ""}`}>
+                        {notification.message}
+                      </p>
+                      {notification.data.expiry_date && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Expiration: {new Date(notification.data.expiry_date).toLocaleDateString("fr-FR")}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(notification.created_at).toLocaleDateString("fr-FR")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-gray-500">No notifications</div>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Click outside to close notifications */}
-      {notificationsOpen && <div className="fixed inset-0 z-40" onClick={() => setNotificationsOpen(false)} />}
-
-      {/* Logout confirmation dialog */}
+      {/* Logout Dialog */}
       <LogoutConfirmationDialog isOpen={showLogoutConfirmation} onClose={() => setShowLogoutConfirmation(false)} />
     </div>
   )
