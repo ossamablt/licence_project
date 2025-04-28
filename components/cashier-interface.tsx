@@ -72,6 +72,14 @@ interface Reservation {
   table: TableInterface
 }
 
+const categoryMap: { [key: number]: string } = {
+  1: "Burgers",
+  2: "Accompagnements",
+  3: "Boissons",
+  4: "Desserts",
+  5: "Menus",
+}
+
 export default function CashierInterface() {
   // Gestion des états
   const [activeTab, setActiveTab] = useState("commandes")
@@ -130,6 +138,33 @@ export default function CashierInterface() {
     setMenuItems(getMenuItems())
     fetchTodayReservations()
 
+
+// Fetch menu items from API
+const fetchMenuItems = async () => {
+  try {
+    const response = await api.get("/menuItems")
+    const transformedItems = response.data["Menu Items"].map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: categoryMap[item.catégory_id] || "Autre",
+      image: item.imageUrl || "/placeholder.svg",
+      is_available: item.is_available
+    }))
+    setMenuItems(transformedItems)
+  } catch (error) {
+    console.error("Failed to fetch menu items:", error)
+    toast({
+      title: "Erreur",
+      description: "Échec du chargement du menu",
+      variant: "destructive",
+    })
+  }
+}
+fetchMenuItems()
+
+
     const intervalId = setInterval(() => {
       loadData()
     }, 5000) // Interrogation toutes les 5 secondes
@@ -152,7 +187,7 @@ export default function CashierInterface() {
       setTodayReservations(response.data.reservations) // ✅ Correct access
     } catch (error) {
       console.error("Échec de récupération des réservations du jour:", error)
-      // Create mock reservations as fallback
+      // Create mock reservations as fallback formData
       const mockReservations = [
         {
           id: 1,
@@ -691,7 +726,7 @@ export default function CashierInterface() {
     }
   }, [todayReservations])
 
-  // Set table form data when a table is selected for editing
+  // Set table form data when a table is selected for editing reservations
   useEffect(() => {
     if (selectedTable) {
       const table = tables.find((t) => t.id === selectedTable.id)

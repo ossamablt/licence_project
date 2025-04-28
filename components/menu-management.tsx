@@ -25,9 +25,13 @@ interface MenuItem {
 
 const categoryMap: { [key: number]: string } = {
   1: "Burgers",
-  2: "Boisson",
-  3: "Desserts",
-  4: "krepes",
+  2: "Tacos",
+  3: "Frites",
+  4: "Pizzas",
+  5: "suchis",
+  6: "Desserts",
+  7: "Boissons",
+ 
 }
 
 export function MenuManagement() {
@@ -66,7 +70,7 @@ export function MenuManagement() {
     fetchMenuItems()
   }, [])
 
-  const categories = ["all", ...Object.values(categoryMap)]
+  const categories = ["all",...Object.values(categoryMap)]
 
   const filteredItems = menuItems.filter((item) => {
     const categoryName = categoryMap[item.catégory_id] || ""
@@ -317,7 +321,7 @@ export function MenuManagement() {
                 <span className="font-bold text-orange-500">{formatPrice(item.price)}</span>
               </div>
               <div className="flex items-center mb-3">
-                <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full">
+                <span className="text-xs px-1 py-0.5 bg-orange-100 text-orange-800 rounded-full">
                   {categoryMap[item.catégory_id]}
                 </span>
               </div>

@@ -15,24 +15,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { OlirabLogo } from "@/components/olirab-logo"
-import { Search, Plus, Clock, ChefHat, Bell, User, CreditCard, Coffee, LogOut } from "lucide-react"
+import { Search, Plus, Clock, ChefHat, Bell, CreditCard, Coffee, LogOut } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import notificationService from "@/lib/notificationService"
-import { mockTables, mockMenuItems } from "@/lib/mockData"
-import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import api from "@/lib/api"
+import type { MenuItem as BaseMenuItem, Table, OrderItem } from "@/lib/sharedDataService"
 
-interface MenuItem {
-  id: number
-  name: string
-  category: string
-  price: number
-  image: string
-  options?: {
-    name: string
-    choices: string[]
-  }[]
+type MenuItem = BaseMenuItem & {
+  imageUrl?: string
 }
 
 interface TableOrder {
@@ -40,29 +31,15 @@ interface TableOrder {
   tableNumber: number
   time: string
   status: "pending" | "preparing" | "ready" | "completed"
-  items: {
-    id: number
-    name: string
-    size: string
-    options: { [key: string]: string }
-    price: number
-  }[]
+  items: OrderItem[]
   total: number
   notifiedKitchen: boolean
   notifiedCashier: boolean
 }
 
-interface Table {
-  id: number
-  number: number
-  seats: number
-  status: "free" | "occupied" | "reserved"
-  order?: TableOrder
-}
-
 export default function ServerInterface() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState("orders")
+  const [activeTab, setActiveTab] = useState("tables")
   const [orders, setOrders] = useState<TableOrder[]>([])
   const [tables, setTables] = useState<Table[]>([])
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -73,57 +50,436 @@ export default function ServerInterface() {
   const [isTableSelectionOpen, setIsTableSelectionOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>("all")
+
+  // Category mapping for the database
+  const categoryMap: { [key: number]: string } = {
+    1: "Burgers",
+    2: "Accompagnements",
+    3: "Boissons",
+    4: "Desserts",
+    5: "Menus",
+  }
 
   // Check authentication and load initial data
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
+    
     // if (!isLoggedIn || userRole !== "server") {
     //   router.push("/login")
     //   return
     // }
+    // Load initial data
+    loadData()
 
-    // Connect to notification service
-    notificationService.connect()
+    // Set up polling for data refresh
+    const intervalId = setInterval(() => {
+      loadData()
+    }, 5000) // Poll every 5 seconds
 
-    // Subscribe to order updates
-    const orderUpdateSubscription = notificationService.subscribe("order.updated", (data) => {
-      setOrders((prevOrders) =>
-        prevOrders.map((order) =>
-          order.id === data.id
-            ? { ...order, status: data.status as "pending" | "preparing" | "ready" | "completed" }
-            : order
-        ),
-      )
-    })
-
-    // Load data
-    setLoading(true)
-
-    // Get orders from shared state
-    const sharedOrders = getSharedOrders()
-    setOrders(sharedOrders)
-
-    // Set tables and menu items from mock data
-    setTables(mockTables)
-    setMenuItems(mockMenuItems)
-
-    setLoading(false)
-
-    // Cleanup
     return () => {
-      notificationService.unsubscribe("order.updated", orderUpdateSubscription)
-      notificationService.disconnect()
+      clearInterval(intervalId) // Clean up on unmount
     }
   }, [router])
 
-  // Handle logout
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("userRole")
-    localStorage.removeItem("username")
-    router.push("/login")
+  // Load data from API service
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      // Get tables
+      try {
+        const tablesResponse = await api.get("/tables")
+        if (tablesResponse.data && Array.isArray(tablesResponse.data.tables)) {
+          setTables(
+            tablesResponse.data.tables.map((table: any) => ({
+              id: table.id,
+              number: table.number,
+              seats: table.capacity,
+              status: table.status || "free",
+              orderId: table.order_id || null,
+            })),
+          )
+        } else {
+          console.warn("Could not load tables from API, using mock data")
+          // Fallback to mock data
+          const { getTables } = require("@/lib/sharedDataService")
+          setTables(getTables())
+          toast({
+            title: "Mode démo",
+            description: "Utilisation des données de démonstration pour les tables",
+          })
+        }
+      } catch (error) {
+        console.warn("Error loading tables:", error)
+        // Fallback to mock data
+        const { getTables } = require("@/lib/sharedDataService")
+        setTables(getTables())
+      }
+
+      // Get menu items
+      try {
+        const menuItemsResponse = await api.get("/menuItems")
+        if (menuItemsResponse.data && menuItemsResponse.data["Menu Items"]) {
+          setMenuItems(
+            menuItemsResponse.data["Menu Items"].map((item: any) => ({
+              id: item.id,
+              name: item.name,
+              description: item.description || "",
+              price: item.price,
+              category: categoryMap[item.catégory_id] || "Autre",
+              imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
+            })),
+          )
+        } else {
+          console.warn("Could not load menu items from API, using mock data")
+          // Fallback to mock data
+          const { getMenuItems } = require("@/lib/sharedDataService")
+          setMenuItems(getMenuItems())
+          toast({
+            title: "Mode démo",
+            description: "Utilisation des données de démonstration pour le menu",
+          })
+        }
+      } catch (error) {
+        console.warn("Error loading menu items:", error)
+        // Fallback to mock data
+        const { getMenuItems } = require("@/lib/sharedDataService")
+        setMenuItems(getMenuItems())
+      }
+
+      // Get orders orderPayload 
+      try {
+        const ordersResponse = await api.get("/orders")
+        if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+          setOrders(
+            ordersResponse.data.orders.map((order: any) => {
+              const orderItems = order.order_details.map((detail: any, index: number) => {
+                const menuItem = menuItems.find((item) => item.id === detail.menu_item_id)
+                return {
+                  id: index + 1,
+                  menuItemId: detail.menu_item_id,
+                  name: menuItem ? menuItem.name : `Item #${detail.menu_item_id}`,
+                  price: detail.price,
+                  quantity: detail.quantity,
+                }
+              })
+
+              return {
+                id: order.id,
+                tableNumber: order.table_id,
+                time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+                status: order.status,
+                items: orderItems,
+                total: order.total_price,
+                notifiedKitchen: order.notified_kitchen || false,
+                notifiedCashier: order.notified_cashier || false,
+              }
+            }),
+          )
+        } else {
+          console.warn("Could not load orders from API, using mock data")
+          // For now, we'll just use an empty array
+          setOrders([])
+        }
+      } catch (error) {
+        console.warn("Error loading orders:", error)
+        // For now, we'll just use an empty array
+        setOrders([])
+      }
+    } catch (error) {
+      console.error("Error loading data:", error)
+      // Fallback to mock data
+      const { getTables, getMenuItems } = require("@/lib/sharedDataService")
+      setTables(getTables())
+      setMenuItems(getMenuItems())
+      setOrders([])
+      toast({
+        title: "Mode démo",
+        description: "Utilisation des données de démonstration (API non disponible)",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Start new order
+  const startNewOrder = () => {
+    setIsTableSelectionOpen(true)
+  }
+
+  // Select table for new order
+  const selectTableForOrder = async (table: Table) => {
+    setSelectedTable(table)
+
+    // If table has an existing order, load it
+    if (table.orderId) {
+      try {
+        // Try to fetch the order from the API
+        const orderResponse = await api.get(`/orders/${table.orderId}`)
+        if (orderResponse.data && orderResponse.data.order) {
+          const order = orderResponse.data.order
+          const orderItems = order.order_details.map((detail: any, index: number) => {
+            const menuItem = menuItems.find((item) => item.id === detail.menu_item_id)
+            return {
+              id: index + 1,
+              menuItemId: detail.menu_item_id,
+              name: menuItem ? menuItem.name : `Item #${detail.menu_item_id}`,
+              price: detail.price,
+              quantity: detail.quantity,
+            }
+          })
+
+          setNewOrder({
+            id: order.id,
+            tableNumber: table.number,
+            time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+            status: order.status,
+            items: orderItems,
+            total: order.total_price,
+            notifiedKitchen: order.notified_kitchen || false,
+            notifiedCashier: order.notified_cashier || false,
+          })
+        } else {
+          // Create new order if no order found
+          setNewOrder({
+            id: Math.floor(Math.random() * 10000),
+            tableNumber: table.number,
+            time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+            status: "pending",
+            items: [],
+            total: 0,
+            notifiedKitchen: false,
+            notifiedCashier: false,
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching order:", error)
+        // Create new order if error
+        setNewOrder({
+          id: Math.floor(Math.random() * 10000),
+          tableNumber: table.number,
+          time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+          status: "pending",
+          items: [],
+          total: 0,
+          notifiedKitchen: false,
+          notifiedCashier: false,
+        })
+      }
+    } else {
+      // Create new order for new table
+      setNewOrder({
+        id: Math.floor(Math.random() * 10000),
+        tableNumber: table.number,
+        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+        status: "pending",
+        items: [],
+        total: 0,
+        notifiedKitchen: false,
+        notifiedCashier: false,
+      })
+    }
+
+    setIsTableSelectionOpen(false)
+    setIsNewOrderDialogOpen(true)
+  }
+
+  // Add item to order
+  const addItemToOrder = (item: MenuItem) => {
+    if (!newOrder) return
+
+    const existingItem = newOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
+
+    if (existingItem) {
+      // Increment quantity if item already exists
+      const updatedItems = newOrder.items.map((orderItem) =>
+        orderItem.menuItemId === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
+      )
+
+      setNewOrder({
+        ...newOrder,
+        items: updatedItems,
+        total: calculateTotal(updatedItems),
+      })
+    } else {
+      // Add new item
+      const newItem: OrderItem = {
+        id: newOrder.items.length + 1,
+        menuItemId: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: 1,
+      }
+
+      const updatedItems = [...newOrder.items, newItem]
+
+      setNewOrder({
+        ...newOrder,
+        items: updatedItems,
+        total: calculateTotal(updatedItems),
+      })
+    }
+
+    toast({
+      title: "Article ajouté",
+      description: `${item.name} ajouté à la commande`,
+    })
+  }
+
+  // Calculate total
+  const calculateTotal = (items: OrderItem[]): number => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  }
+
+  // Format price
+  const formatPrice = (price: number): string => {
+    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(price)
+  }
+
+  // Send order to kitchen
+  const sendOrderToKitchen = async () => {
+    if (!newOrder || !selectedTable) {
+      toast({
+        title: "Erreur",
+        description: "Informations de commande incomplètes",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (newOrder.items.length === 0) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez ajouter des articles à la commande",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // Create the order payload with all required fields
+      const orderPayload = {
+        user_id: localStorage.getItem("userId") || 1,
+        date: new Date().toISOString(),
+        table_id: selectedTable.id,
+        status: "pending",
+        total_price: newOrder.total,
+        type: "sur place",
+        esstimation_time: 30, // Add default estimation time
+        delivry_adress: "", // Empty string if not applicable
+        delivry_phone: "", // Empty string if not applicable
+        order_details: newOrder.items.map((item) => ({
+          menu_item_id: item.menuItemId,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+      }
+
+      // Send the order to the API 
+      const response = await api.post("/orders", orderPayload)
+
+      if (response.data && response.data.success) {
+        toast({
+          title: "Commande envoyée",
+          description: "La commande a été envoyée à la cuisine",
+        })
+
+        // Update tables
+        setTables(
+          tables.map((t) =>
+            t.id === selectedTable.id ? { ...t, status: "occupied", orderId: response.data.order_id } : t,
+          ),
+        )
+
+        // Reset current order
+        setNewOrder(null)
+        setSelectedTable(null)
+        setIsNewOrderDialogOpen(false)
+
+        // Refresh data
+        loadData()
+      } else {
+        toast({
+          title: "Erreur",
+          description: response.data?.message || "Impossible de créer la commande",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error creating order:", error)
+      toast({
+        title: "Erreur de connexion",
+        description: "Impossible de se connecter au serveur",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Notify kitchen
+  const notifyKitchen = async (orderId: number) => {
+    try {
+      const response = await api.post(`/orders/${orderId}/notify-kitchen`)
+
+      if (response.data && response.data.success) {
+        // Update order status locally
+        setOrders(
+          orders.map((order) =>
+            order.id === orderId ? { ...order, status: "preparing", notifiedKitchen: true } : order,
+          ),
+        )
+
+        toast({
+          title: "Cuisine notifiée",
+          description: "La cuisine a été notifiée de préparer la commande",
+        })
+      } else {
+        toast({
+          title: "Erreur",
+          description: response.data?.message || "Impossible de notifier la cuisine",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error notifying kitchen:", error)
+      toast({
+        title: "Erreur de connexion",
+        description: "Impossible de se connecter au serveur",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Notify cashier
+  const notifyCashier = async (orderId: number) => {
+    try {
+      const response = await api.post(`/orders/${orderId}/notify-cashier`)
+
+      if (response.data && response.data.success) {
+        // Update order status locally
+        setOrders(orders.map((order) => (order.id === orderId ? { ...order, notifiedCashier: true } : order)))
+
+        toast({
+          title: "Caissier notifié",
+          description: "Le caissier a été notifié pour encaisser la commande",
+        })
+      } else {
+        toast({
+          title: "Erreur",
+          description: response.data?.message || "Impossible de notifier le caissier",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error notifying cashier:", error)
+      toast({
+        title: "Erreur de connexion",
+        description: "Impossible de se connecter au serveur",
+        variant: "destructive",
+      })
+    }
   }
 
   // Filter orders based on search term
@@ -132,6 +488,10 @@ export default function ServerInterface() {
       order.items.some((item) => item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       order.tableNumber.toString().includes(searchTerm),
   )
+
+  // Filter menu items by category
+  const filteredMenuItems =
+    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
 
   // Get status color
   const getStatusColor = (status: string) => {
@@ -165,152 +525,6 @@ export default function ServerInterface() {
     }
   }
 
-  // Format price
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-    }).format(price)
-  }
-
-  // Start new order
-  const startNewOrder = () => {
-    setIsTableSelectionOpen(true)
-  }
-
-  // Select table for new order
-  const selectTableForOrder = (table: Table) => {
-    if (table.status === "occupied") {
-      // Find existing order for this table
-      const existingOrder = orders.find((order) => order.tableNumber === table.number)
-      if (existingOrder) {
-        setNewOrder(existingOrder)
-        setSelectedTable(table)
-        setIsTableSelectionOpen(false)
-        setIsNewOrderDialogOpen(true)
-        return
-      }
-    }
-
-    setSelectedTable(table)
-    setNewOrder({
-      id: Math.max(...orders.map((o) => o.id), 0) + 1,
-      tableNumber: table.number,
-      time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-      status: "pending",
-      items: [],
-      total: 0,
-      notifiedKitchen: false,
-      notifiedCashier: false,
-    })
-    setIsTableSelectionOpen(false)
-    setIsNewOrderDialogOpen(true)
-
-    // Update table status
-    setTables(tables.map((t) => (t.id === table.id ? { ...t, status: "occupied" } : t)))
-  }
-
-  // Add item to order
-  const addItemToOrder = (item: MenuItem) => {
-    if (!newOrder) return
-
-    const newItem = {
-      id: newOrder.items.length + 1,
-      name: item.name,
-      size: "medium",
-      options: {},
-      price: item.price,
-    }
-
-    setNewOrder({
-      ...newOrder,
-      items: [...newOrder.items, newItem],
-      total: newOrder.total + item.price,
-    })
-  }
-
-  // Send order to kitchen
-  const sendOrderToKitchen = () => {
-    if (!newOrder) return
-
-    const existingOrderIndex = orders.findIndex((o) => o.id === newOrder.id)
-    let updatedOrders
-
-    if (existingOrderIndex >= 0) {
-      // Update existing order
-      updatedOrders = [...orders]
-      updatedOrders[existingOrderIndex] = {
-        ...newOrder,
-        status: "pending",
-        notifiedKitchen: false,
-      }
-    } else {
-      // Create new order
-      updatedOrders = [...orders, newOrder]
-    }
-
-    setOrders(updatedOrders as TableOrder[])
-    setSharedOrders(updatedOrders)
-
-    // Notify kitchen via notification service
-    notificationService.publish("order.new", newOrder, "kitchen")
-
-    // Reset new order state
-    setNewOrder(null)
-    setSelectedTable(null)
-    setIsNewOrderDialogOpen(false)
-
-    // Show success toast
-    toast({
-      title: "Commande envoyée",
-      description: "La commande a été envoyée avec succès",
-    })
-  }
-
-  // Notify kitchen
-  const notifyKitchen = (orderId: number) => {
-    // Update order status
-    const updatedOrders = orders.map((order) =>
-      order.id === orderId ? { ...order, status: "preparing", notifiedKitchen: true } : order,
-    )
-
-    setOrders(updatedOrders)
-    setSharedOrders(updatedOrders)
-
-    // Notify kitchen via notification service
-    const orderToNotify = orders.find((order) => order.id === orderId)
-    if (orderToNotify) {
-      notificationService.publish("kitchen.notification", orderToNotify, "kitchen")
-    }
-
-    // Show success toast
-    toast({
-      title: "Cuisine notifiée",
-      description: "La cuisine a été notifiée de préparer la commande",
-    })
-  }
-
-  // Notify cashier
-  const notifyCashier = (orderId: number) => {
-    // Update order status
-    const updatedOrders = orders.map((order) => (order.id === orderId ? { ...order, notifiedCashier: true } : order))
-
-    setOrders(updatedOrders)
-    setSharedOrders(updatedOrders)
-
-    // Notify cashier via notification service
-    const orderToNotify = orders.find((order) => order.id === orderId)
-    if (orderToNotify) {
-      notificationService.publish("cashier.notification", orderToNotify, "cashier")
-    }
-
-    // Show success toast
-    toast({
-      title: "Caissier notifié",
-      description: "Le caissier a été notifié pour encaisser la commande",
-    })
-  }
-
   // Get table status color
   const getTableStatusColor = (status: string) => {
     switch (status) {
@@ -339,7 +553,7 @@ export default function ServerInterface() {
     }
   }
 
-  if (loading) {
+  if (loading && tables.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-blue-50/50">
         <div className="text-center">
@@ -372,12 +586,10 @@ export default function ServerInterface() {
             </Button>
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
-              <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/server.jpeg?height=40&width=40" />
-                <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
+                <AvatarImage src="/placeholder.svg?height=40&width=40" />
+                <AvatarFallback className="bg-orange-100 text-orange-700">SV</AvatarFallback>
               </Avatar>
-              </div>
               <span className="font-medium">Serveur</span>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
@@ -406,14 +618,15 @@ export default function ServerInterface() {
               {filteredOrders.map((order) => (
                 <Card key={order.id} className="relative overflow-hidden">
                   <div
-                    className={`absolute top-0 left-0 w-1 h-full ${order.status === "preparing"
-                      ? "bg-blue-500"
-                      : order.status === "ready"
-                        ? "bg-green-500"
-                        : order.status === "completed"
-                          ? "bg-gray-500"
-                          : "bg-yellow-500"
-                      }`}
+                    className={`absolute top-0 left-0 w-1 h-full ${
+                      order.status === "preparing"
+                        ? "bg-blue-500"
+                        : order.status === "ready"
+                          ? "bg-green-500"
+                          : order.status === "completed"
+                            ? "bg-gray-500"
+                            : "bg-yellow-500"
+                    }`}
                   />
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
@@ -435,13 +648,9 @@ export default function ServerInterface() {
                         <div key={item.id} className="flex justify-between items-start">
                           <div>
                             <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">
-                              {Object.entries(item.options)
-                                .map(([key, value]) => `${value}`)
-                                .join(" • ")}
-                            </p>
+                            <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
                           </div>
-                          <span className="text-sm font-medium">{formatPrice(item.price)}</span>
+                          <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
                         </div>
                       ))}
                       <div className="pt-3 border-t mt-3">
@@ -512,12 +721,13 @@ export default function ServerInterface() {
                     <h3 className="text-lg font-bold mb-1">Table {table.number}</h3>
                     <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${table.status === "free"
-                        ? "bg-green-200 text-green-800"
-                        : table.status === "occupied"
-                          ? "bg-blue-200 text-blue-800"
-                          : "bg-yellow-200 text-yellow-800"
-                        }`}
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        table.status === "free"
+                          ? "bg-green-200 text-green-800"
+                          : table.status === "occupied"
+                            ? "bg-blue-200 text-blue-800"
+                            : "bg-yellow-200 text-yellow-800"
+                      }`}
                     >
                       {getTableStatusText(table.status)}
                     </span>
@@ -548,12 +758,13 @@ export default function ServerInterface() {
                   <h3 className="text-lg font-bold mb-1">Table {table.number}</h3>
                   <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                   <span
-                    className={`text-xs px-2 py-1 rounded-full ${table.status === "free"
-                      ? "bg-green-200 text-green-800"
-                      : table.status === "occupied"
-                        ? "bg-blue-200 text-blue-800"
-                        : "bg-yellow-200 text-yellow-800"
-                      }`}
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      table.status === "free"
+                        ? "bg-green-200 text-green-800"
+                        : table.status === "occupied"
+                          ? "bg-blue-200 text-blue-800"
+                          : "bg-yellow-200 text-yellow-800"
+                    }`}
                   >
                     {getTableStatusText(table.status)}
                   </span>
@@ -582,8 +793,33 @@ export default function ServerInterface() {
             {/* Menu Items */}
             <div className="space-y-4">
               <h3 className="font-medium">Menu</h3>
+
+              <div className="mb-4">
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  <Button
+                    variant={selectedCategory === "all" ? "default" : "outline"}
+                    onClick={() => setSelectedCategory("all")}
+                    className="whitespace-nowrap"
+                    size="sm"
+                  >
+                    Tous
+                  </Button>
+                  {Array.from(new Set(menuItems.map((item) => item.category))).map((category) => (
+                    <Button
+                      key={category}
+                      variant={selectedCategory === category ? "default" : "outline"}
+                      onClick={() => setSelectedCategory(category)}
+                      className="whitespace-nowrap"
+                      size="sm"
+                    >
+                      {category}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2">
-                {menuItems.map((item) => (
+                {filteredMenuItems.map((item) => (
                   <Card
                     key={item.id}
                     className="cursor-pointer hover:border-blue-300 transition-colors"
@@ -591,7 +827,7 @@ export default function ServerInterface() {
                   >
                     <CardContent className="p-3 flex items-center gap-3">
                       <img
-                        src={item.image || "/placeholder.svg?height=100&width=100"}
+                        src={item.imageUrl || "/placeholder.svg?height=100&width=100"}
                         alt={item.name}
                         className="w-12 h-12 rounded-md object-cover"
                       />
@@ -617,13 +853,9 @@ export default function ServerInterface() {
                         <div key={item.id} className="p-3 flex justify-between items-start">
                           <div>
                             <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">
-                              {Object.entries(item.options)
-                                .map(([key, value]) => `${value}`)
-                                .join(" • ")}
-                            </p>
+                            <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
                           </div>
-                          <span className="font-medium">{formatPrice(item.price)}</span>
+                          <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
                         </div>
                       ))
                     ) : (
@@ -656,9 +888,9 @@ export default function ServerInterface() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* Logout confirmation dialog */}
+
+      {/* Logout confirmation dialog  */}
       <LogoutConfirmationDialog isOpen={showLogoutConfirmation} onClose={() => setShowLogoutConfirmation(false)} />
     </div>
   )
 }
-

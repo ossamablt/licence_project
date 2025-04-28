@@ -5,22 +5,12 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
-import { Clock, CheckCircle, AlertCircle, ChefHat, User, LogOut } from "lucide-react"
+import { Clock, CheckCircle, AlertCircle, ChefHat, LogOut } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import notificationService from "@/lib/notificationService"
 import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-// Types
-interface MenuItem {
-  id: number
-  name: string
-  category: string
-  price: number
-  image: string
-  size?: string
-  extras?: string[]
-}
 
 interface Order {
   id: number
@@ -46,117 +36,178 @@ export default function KitchenInterface() {
   const [loading, setLoading] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
 
-  // Check authentication and load initial data
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    // if (!isLoggedIn || userRole !== "kitchen") {
-    //   router.push("/login")
-    //   return
-    // }
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch('/api/orders?status=pending&with=orderDetails');
+        if (!response.ok) throw new Error('Échec de la récupération');
+        
+        const ordersData = await response.json();
+    
+        const transformedOrders = ordersData.map((order: any) => ({
+          id: order.id,
+          tableNumber: order.table?.num_table || "N/A",
+          type: order.type,
+          status: order.status,
+          total: order.total_price,
+          createdAt: new Date(order.date).toLocaleTimeString(),
+          items: order.order_details.map((detail: any) => ({
+            id: detail.id,
+            name: detail.menu_item.name,
+            quantity: detail.quantity,
+            price: detail.price,
+            specialRequest: detail.special_request || ""
+          })),
+          ...(order.type === "livraison" && {
+            deliveryAddress: order.delivry_adress,
+            deliveryPhone: order.delivry_phone
+          })
+        }));
+    
+        setOrders(transformedOrders);
+        setSharedOrders(transformedOrders);
+    
+      } catch (error) {
+        console.error("Erreur cuisine:", error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les commandes",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Rafraîchissement automatique
+    useEffect(() => {
+      const interval = setInterval(fetchOrders, 10000);
+      return () => clearInterval(interval);
+    }, []);
 
-    // Connect to notification service
-    notificationService.connect()
-
-    // Subscribe to new orders
-    const newOrderSubscription = notificationService.subscribe("order.new", (data) => {
-      setOrders((prevOrders) => [
-        ...prevOrders,
-        {
-          ...data,
-          time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-          items: data.items || [],
-          total: data.total || 0,
-          notifiedKitchen: true,
-          notifiedCashier: false,
-        },
-      ])
+    const handleNewOrder = (data: Order) => {
+      setOrders(prevOrders => {
+        if (!prevOrders.some(order => order.id === data.id)) {
+          return [
+            ...prevOrders,
+            {
+              ...data,
+              time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+              items: data.items || [],
+              total: data.total || 0,
+              notifiedKitchen: true,
+              notifiedCashier: false,
+            }
+          ]
+        }
+        return prevOrders
+      })
       setNewOrderNotification(true)
-
       toast({
         title: "Nouvelle commande",
         description: `Table ${data.tableNumber}: ${data.items?.length || 1} article(s)`,
       })
-    })
+    }
 
-    // Subscribe to kitchen notifications
-    const kitchenNotificationSubscription = notificationService.subscribe("kitchen.notification", (data) => {
-      setOrders((prevOrders) =>
-        prevOrders.map((order) =>
-          order.id === data.id ? { ...order, status: "preparing", notifiedKitchen: true } : order,
-        ),
+    const handleKitchenNotification = (data: Order) => {
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === data.id ? { ...order, status: "preparing", notifiedKitchen: true } : order
+        )
       )
-
       toast({
         title: "Notification cuisine",
         description: `Commande Table ${data.tableNumber} à préparer`,
       })
-    })
+    }
 
-    // Load initial orders
-    setLoading(true)
-    // Get orders from shared state or mock data
-    const sharedOrders = getSharedOrders()
-    setOrders(sharedOrders)
-    setLoading(false)
+    const initialize = async () => {
+      // if (!isLoggedIn || userRole !== "kitchen") {
+      //   router.push("/login")
+      //   return
+      // }
 
-    // Cleanup
+      notificationService.connect()
+      const newOrderSub = notificationService.subscribe("order.new", handleNewOrder)
+      const kitchenNotifSub = notificationService.subscribe("kitchen.notification", handleKitchenNotification)
+      
+      await fetchOrders()
+
+      return { newOrderSub, kitchenNotifSub }
+    }
+
+    const subs = initialize()
+
     return () => {
-      notificationService.unsubscribe("order.new", newOrderSubscription)
-      notificationService.unsubscribe("kitchen.notification", kitchenNotificationSubscription)
-      notificationService.disconnect()
+      subs.then(({ newOrderSub, kitchenNotifSub }) => {
+        notificationService.unsubscribe("order.new", newOrderSub)
+        notificationService.unsubscribe("kitchen.notification", kitchenNotifSub)
+        notificationService.disconnect()
+      })
     }
   }, [router])
 
-  // Update order status
-  const updateOrderStatus = (orderId: number, newStatus: "pending" | "preparing" | "ready" | "completed") => {
-    // Update local state
-    const updatedOrders = orders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order))
+  const updateOrderStatus = async (orderId: number, newStatus: "pending" | "preparing" | "ready" | "completed") => {
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
 
-    setOrders(updatedOrders)
-    setSharedOrders(updatedOrders)
+      if (!response.ok) throw new Error('Échec de la mise à jour')
 
-    // If order is ready, notify server
-    if (newStatus === "ready") {
-      const orderToNotify = orders.find((order) => order.id === orderId)
-      if (orderToNotify) {
-        notificationService.publish("order.updated", { ...orderToNotify, status: newStatus }, "server")
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      )
+      setSharedOrders(
+        orders.map((order: Order) =>
+          order.id === orderId ? { ...order, status: newStatus } : order
+        )
+      )
+
+      if (newStatus === "ready") {
+        const orderToNotify = orders.find(order => order.id === orderId)
+        if (orderToNotify) {
+          notificationService.publish("order.updated", { ...orderToNotify, status: newStatus }, "server")
+        }
       }
-    }
 
-    // Show success toast
-    toast({
-      title: "Statut mis à jour",
-      description: `La commande est maintenant ${getStatusText(newStatus).toLowerCase()}`,
-    })
+      toast({
+        title: "Statut mis à jour",
+        description: `La commande est maintenant ${getStatusText(newStatus).toLowerCase()}`,
+      })
 
-    // Reset notification flag if we're starting to prepare an order
-    if (newStatus === "preparing") {
-      setNewOrderNotification(false)
+      if (newStatus === "preparing") setNewOrderNotification(false)
+    } catch (error) {
+      console.error("Erreur de mise à jour:", error)
+      toast({
+        title: "Erreur",
+        description: "Échec de la mise à jour du statut",
+        variant: "destructive"
+      })
     }
   }
 
-  // Get status text in French
   const getStatusText = (status: string) => {
     switch (status) {
-      case "preparing":
-        return "En préparation"
-      case "ready":
-        return "Prêt"
-      case "pending":
-        return "En attente"
-      case "completed":
-        return "Terminé"
-      default:
-        return status
+      case "preparing": return "En préparation"
+      case "ready": return "Prêt"
+      case "pending": return "En attente"
+      case "completed": return "Terminé"
+      default: return status
     }
   }
 
-  // Filter orders by status
-  const pendingOrders = orders.filter((order) => order.status === "pending" && order.notifiedKitchen)
-  const preparingOrders = orders.filter((order) => order.status === "preparing")
-  const readyOrders = orders.filter((order) => order.status === "ready")
+  // Filtrage des commandes
+  const pendingOrders = orders.filter(order => order.status === "pending" && order.notifiedKitchen)
+  const preparingOrders = orders.filter(order => order.status === "preparing")
+  const readyOrders = orders.filter(order => order.status === "ready")
 
   if (loading) {
     return (
