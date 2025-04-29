@@ -31,7 +31,7 @@ const categoryMap: { [key: number]: string } = {
   5: "suchis",
   6: "Desserts",
   7: "Boissons",
- 
+
 }
 
 export function MenuManagement() {
@@ -103,22 +103,28 @@ export function MenuManagement() {
     formData.append("is_available", newItem.is_available ? "1" : "0")
     if (imageFile) formData.append("image", imageFile)
 
-    try {
-      if (isEditMode && selectedItem) {
-        await api.put(`/menuItems/${selectedItem.id}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
-      } else {
-        await api.post("/menuItems", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        })
-      }
+      try {
+        let response
+        if (isEditMode && selectedItem) {
+          // Correction de l'endpoint PUT
+          response = await api.put(`/menuItems/${selectedItem.id}`, formData, {
+            headers: { 
+              "Content-Type": "multipart/form-data",
+            },
+          })
+        } else {
+          response = await api.post("/menuItems", formData, {
+            headers: { 
+              "Content-Type": "multipart/form-data",
+            },
+          })
+        }
 
-      const response = await api.get("/menuItems")
-      setMenuItems(response.data["Menu Items"].map((item: any) => ({
-        ...item,
-        imageUrl: item.imageUrl || "/placeholder.svg"
-      })))
+        const refreshed = await api.get("/menuItems")
+        setMenuItems(refreshed.data["Menu Items"].map((item: any) => ({
+          ...item,
+          imageUrl: item.imageUrl || "/placeholder.svg"
+        })))
 
       toast({
         title: isEditMode ? "Plat mis à jour" : "Plat ajouté",
@@ -301,7 +307,7 @@ export function MenuManagement() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredItems.map((item) => (
           <Card key={item.id} className={`overflow-hidden hover:shadow-md transition-shadow ${!item.is_available ? "opacity-500" : ""}`}>
-            <div className="relative h-90 w-full">
+            <div className="relative h-60 w-full">
               <Image
                 src={item.imageUrl}
                 alt={item.name}
@@ -358,7 +364,7 @@ export function MenuManagement() {
           </DialogHeader>
           {selectedItem && (
             <div className="space-y-4">
-              <div className="relative h-64 w-full rounded-md overflow-hidden">
+              <div className="relative h-50 w-full rounded-md overflow-hidden object-cover">
                 <Image
                   src={selectedItem.imageUrl}
                   alt={selectedItem.name}

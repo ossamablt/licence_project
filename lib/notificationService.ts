@@ -97,7 +97,7 @@ class NotificationService {
 
   private async fetchStockNotifications() {
     try {
-      const response = await api.get('/notifications/stock')
+      const response = await api.get('/notifications')
       return response.data
     } catch (error) {
       console.error('Error fetching stock notifications:', error)
