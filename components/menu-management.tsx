@@ -273,7 +273,6 @@ export function MenuManagement() {
                 <Button
                   onClick={() => {
                     handleMenuItemSubmit();
-                    setIsEditMode(false);
                   }}
                   className="bg-orange-500 hover:bg-orange-600"
                 >
@@ -302,7 +301,7 @@ export function MenuManagement() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filteredItems.map((item) => (
           <Card key={item.id} className={`overflow-hidden hover:shadow-md transition-shadow ${!item.is_available ? "opacity-500" : ""}`}>
-            <div className="relative h-48 w-full">
+            <div className="relative h-90 w-full">
               <Image
                 src={item.imageUrl}
                 alt={item.name}

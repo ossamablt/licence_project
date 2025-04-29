@@ -72,12 +72,16 @@ interface Reservation {
   table: TableInterface
 }
 
+
 const categoryMap: { [key: number]: string } = {
   1: "Burgers",
-  2: "Accompagnements",
-  3: "Boissons",
-  4: "Desserts",
-  5: "Menus",
+  2: "Tacos",
+  3: "Frites",
+  4: "Pizzas",
+  5: "suchis",
+  6: "Desserts",
+  7: "Boissons",
+ 
 }
 
 export default function CashierInterface() {
@@ -855,7 +859,7 @@ fetchMenuItems()
                   className="cursor-pointer hover:border-blue-300 transition-colors"
                   onClick={() => addItemToOrder(item)}
                 >
-                  <div className="relative h-32 w-full">
+                  <div className="relative h-44 w-full">
                     <Image
                       src={item.image || "/placeholder.svg?height=128&width=200"}
                       alt={item.name}

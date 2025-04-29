@@ -53,13 +53,17 @@ export default function ServerInterface() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
 
   // Category mapping for the database
-  const categoryMap: { [key: number]: string } = {
-    1: "Burgers",
-    2: "Accompagnements",
-    3: "Boissons",
-    4: "Desserts",
-    5: "Menus",
-  }
+ 
+const categoryMap: { [key: number]: string } = {
+  1: "Burgers",
+  2: "Tacos",
+  3: "Frites",
+  4: "Pizzas",
+  5: "suchis",
+  6: "Desserts",
+  7: "Boissons",
+ 
+}
 
   // Check authentication and load initial data
   useEffect(() => {
