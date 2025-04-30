@@ -42,51 +42,21 @@ export default function KitchenInterface() {
 
     const fetchOrders = async () => {
       try {
-        const response = await fetch('/api/orders?status=pending&with=orderDetails');
-        if (!response.ok) throw new Error('Échec de la récupération');
-        
-        const ordersData = await response.json();
-    
-        const transformedOrders = ordersData.map((order: any) => ({
-          id: order.id,
-          tableNumber: order.table?.num_table || "N/A",
-          type: order.type,
-          status: order.status,
-          total: order.total_price,
-          createdAt: new Date(order.date).toLocaleTimeString(),
-          items: order.order_details.map((detail: any) => ({
-            id: detail.id,
-            name: detail.menu_item.name,
-            quantity: detail.quantity,
-            price: detail.price,
-            specialRequest: detail.special_request || ""
-          })),
-          ...(order.type === "livraison" && {
-            deliveryAddress: order.delivry_adress,
-            deliveryPhone: order.delivry_phone
-          })
-        }));
-    
-        setOrders(transformedOrders);
-        setSharedOrders(transformedOrders);
-    
+        const response = await fetch('/api/orders')
+        const serverOrders = await response.json()
+        setOrders(serverOrders)
+        setSharedOrders(serverOrders)
       } catch (error) {
-        console.error("Erreur cuisine:", error);
+        console.error("Erreur de récupération des commandes:", error)
         toast({
           title: "Erreur",
-          description: "Impossible de charger les commandes",
+          description: "Échec du chargement des commandes",
           variant: "destructive"
-        });
+        })
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
-    
-    // Rafraîchissement automatique
-    useEffect(() => {
-      const interval = setInterval(fetchOrders, 10000);
-      return () => clearInterval(interval);
-    }, []);
+    }
 
     const handleNewOrder = (data: Order) => {
       setOrders(prevOrders => {
