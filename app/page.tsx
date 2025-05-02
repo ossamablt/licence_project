@@ -63,6 +63,7 @@ export default function LoginPage() {
       localStorage.setItem("token", data.token)
       localStorage.setItem("userRole", data.role)
       localStorage.setItem("username", data.user.userName)
+      localStorage.setItem("userId", data.user.id)
       localStorage.setItem("isLoggedIn", "true")
 
       // Role-based redirection

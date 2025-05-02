@@ -29,14 +29,22 @@ type MenuItem = BaseMenuItem & {
 interface TableOrder {
   id: number
   tableNumber: number
+  user_id: number
+  type: string
   time: string
   status: "pending" | "preparing" | "ready" | "completed"
-  items: OrderItem[]
+  items: orderItems[]
   total: number
   notifiedKitchen: boolean
   notifiedCashier: boolean
 }
-
+export interface orderItems {
+  id: number
+  menuItemId: number
+  name: string
+  price: number
+  quantity: number
+}
 export default function ServerInterface() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("tables")
@@ -71,17 +79,17 @@ const categoryMap: { [key: number]: string } = {
     const userRole = localStorage.getItem("userRole")
 
     
-    // if (!isLoggedIn || userRole !== "server") {
-    //   router.push("/login")
-    //   return
-    // }
+    if (!isLoggedIn || userRole !== "Serveur") {
+      router.push("/")
+      return
+    }
     // Load initial data
     loadData()
 
     // Set up polling for data refresh
     const intervalId = setInterval(() => {
       loadData()
-    }, 5000) // Poll every 5 seconds
+    }, 5000) 
 
     return () => {
       clearInterval(intervalId) // Clean up on unmount
@@ -160,11 +168,11 @@ const categoryMap: { [key: number]: string } = {
           setOrders(
             ordersResponse.data.orders.map((order: any) => {
               const orderItems = order.order_details.map((detail: any, index: number) => {
-                const menuItem = menuItems.find((item) => item.id === detail.menu_item_id)
+                const menuItem = menuItems.find((item) => item.id === detail.item_id)
                 return {
                   id: index + 1,
-                  menuItemId: detail.menu_item_id,
-                  name: menuItem ? menuItem.name : `Item #${detail.menu_item_id}`,
+                  menuItemId: detail.item_id,
+                  name: menuItem ? menuItem.name : `Article #${detail.item_id}`,
                   price: detail.price,
                   quantity: detail.quantity,
                 }
@@ -176,10 +184,11 @@ const categoryMap: { [key: number]: string } = {
                 time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
                 status: order.status,
                 items: orderItems,
-                total: order.total_price,
+                total: orderItems.reduce((sum: number, item: { price: number; quantity: number }) => sum + (item.price * item.quantity), 0),
                 notifiedKitchen: order.notified_kitchen || false,
                 notifiedCashier: order.notified_cashier || false,
               }
+             
             }),
           )
         } else {
@@ -221,24 +230,47 @@ const categoryMap: { [key: number]: string } = {
     // If table has an existing order, load it
     if (table.orderId) {
       try {
-        // Try to fetch the order from the API
-        const orderResponse = await api.get(`/orders/${table.orderId}`)
-        if (orderResponse.data && orderResponse.data.order) {
-          const order = orderResponse.data.order
+        const orderResponse = await api.get(`/orders/${table.orderId}`);
+        if (orderResponse.data?.order) {
+          const order = orderResponse.data.order;
           const orderItems = order.order_details.map((detail: any, index: number) => {
-            const menuItem = menuItems.find((item) => item.id === detail.menu_item_id)
+            // 1. Vérification des clés alternatives de l'API
+            const itemId = detail.item_id || detail.menu_item_id;
+            
+            // 2. Recherche de l'article dans le menu
+            const menuItem = menuItems.find((item) => item.id == itemId); // == pour gérer les string/numbers
+            
+            // 3. Gestion des données manquantes
+            const itemName = menuItem?.name || `Article #${itemId}`;
+            const price = Number(detail.price) || 0;
+            const quantity = Math.max(Number(detail.quantity) || 1);
+    
+            // 4. Validation des données
+            if (!itemId) {
+              console.error('ID d\'article manquant dans le détail de commande:', detail);
+              return null;
+            }
+            // 5. Retourner l'objet formaté
             return {
               id: index + 1,
-              menuItemId: detail.menu_item_id,
-              name: menuItem ? menuItem.name : `Item #${detail.menu_item_id}`,
-              price: detail.price,
-              quantity: detail.quantity,
-            }
-          })
+              menuItemId: itemId,
+              name: itemName,
+              price: price,
+              quantity: quantity,
+            };
+          }).filter(Boolean); // Filtrer les entrées invalides
+    
+          // 6. Calcul du total sécurisé
+          const total = orderItems.reduce((sum: number, item: orderItems) => sum + (item.price * item.quantity), 0);
+    
+         
+      
 
           setNewOrder({
             id: order.id,
             tableNumber: table.number,
+            user_id: order.user_id,
+            type: order.type,
             time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
             status: order.status,
             items: orderItems,
@@ -254,6 +286,8 @@ const categoryMap: { [key: number]: string } = {
             time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
             status: "pending",
             items: [],
+            type: "A place",
+            user_id: 1,
             total: 0,
             notifiedKitchen: false,
             notifiedCashier: false,
@@ -265,6 +299,8 @@ const categoryMap: { [key: number]: string } = {
         setNewOrder({
           id: Math.floor(Math.random() * 10000),
           tableNumber: table.number,
+          user_id: Number(localStorage.getItem("userId")) || 1,
+          type: "A place",
           time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
           status: "pending",
           items: [],
@@ -281,6 +317,8 @@ const categoryMap: { [key: number]: string } = {
         time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
         status: "pending",
         items: [],
+        type: "A place",
+        user_id: Number(localStorage.getItem("userId")) || 1,
         total: 0,
         notifiedKitchen: false,
         notifiedCashier: false,
@@ -367,22 +405,20 @@ const categoryMap: { [key: number]: string } = {
       // Create the order payload with all required fields
       const orderPayload = {
         user_id: localStorage.getItem("userId") || 1,
-        date: new Date().toISOString(),
         table_id: selectedTable.id,
-        status: "pending",
-        total_price: newOrder.total,
-        type: "sur place",
-        esstimation_time: 30, // Add default estimation time
-        delivry_adress: "", // Empty string if not applicable
-        delivry_phone: "", // Empty string if not applicable
-        order_details: newOrder.items.map((item) => ({
-          menu_item_id: item.menuItemId,
+        type: "A table", // Match API enum
+        esstimation_time: "00:30:00", // Proper time format
+        delivry_adress: null, // Use null instead of empty string
+        delivry_phone: null, // Use null instead of empty string
+        orderDetails: newOrder.items.map((item) => ({
+          item_id: item.menuItemId, // Correct key name
           quantity: item.quantity,
           price: item.price,
         })),
       }
+  
 
-      // Send the order to the API 
+      // Send the order to the API Get
       const response = await api.post("/orders", orderPayload)
 
       if (response.data && response.data.success) {
@@ -398,7 +434,7 @@ const categoryMap: { [key: number]: string } = {
           ),
         )
 
-        // Reset current order
+        // Reset current order Item #undefined
         setNewOrder(null)
         setSelectedTable(null)
         setIsNewOrderDialogOpen(false)

@@ -8,9 +8,10 @@ import { OlirabLogo } from "@/components/olirab-logo"
 import { Clock, CheckCircle, AlertCircle, ChefHat, LogOut } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import notificationService from "@/lib/notificationService"
-import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
+import { setSharedOrders } from "@/lib/notificationService"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarImage } from "@/components/ui/avatar"
+import api from "@/lib/api"
 
 interface Order {
   id: number
@@ -31,69 +32,138 @@ interface Order {
 
 export default function KitchenInterface() {
   const router = useRouter()
+  // const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
+  const [menuItems, setMenuItems] = useState<any[]>([])
+  const [tables, setTables] = useState<any[]>([])
   const [newOrderNotification, setNewOrderNotification] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
-
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
-    const userRole = localStorage.getItem("userRole")
-
+    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+    // const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+    // const userRole = localStorage.getItem("userRole");
     const fetchOrders = async () => {
       try {
-        const response = await fetch('/api/orders')
-        const serverOrders = await response.json()
-        setOrders(serverOrders)
-        setSharedOrders(serverOrders)
+        // Load menu items and tables using api.tsx
+        try {
+          const menuRes = await api.get("/menuItems");
+          setMenuItems(menuRes.data.menuItems || []);
+        } catch (e) {
+          setMenuItems([]);
+        }
+        try {
+          const tablesRes = await api.get("/tables");
+          setTables(tablesRes.data.tables || []);
+        } catch (e) {
+          setTables([]);
+        }
+    
+        try {
+          const ordersResponse = await api.get("/orders")
+          if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+            setOrders(
+              ordersResponse.data.orders.map((order: any) => {
+                const orderItems = order.order_details.map((detail: any, index: number) => {
+                  const menuItem = menuItems.find((item) => item.id === detail.item_id)
+                  // Ensure options is always present and is an object
+                  return {
+                    id: index + 1,
+                    menuItemId: detail.item_id,
+                    name: menuItem ? menuItem.name : `Article #${detail.item_id}`,
+                    price: detail.price,
+                    quantity: detail.quantity,
+                    options: detail.options && typeof detail.options === "object" ? detail.options : {},
+                    size: detail.size || "",
+                  }
+                })
+    
+                return {
+                  id: order.id,
+                  tableNumber: order.table_id,
+                  time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+                  status: order.status,
+                  items: orderItems,
+                  total: orderItems.reduce((sum: number, item: { price: number; quantity: number }) => sum + (item.price * item.quantity), 0),
+                  notifiedKitchen: order.notified_kitchen || false,
+                  notifiedCashier: order.notified_cashier || false,
+                }
+               
+              }),
+            )
+          } else {
+            console.warn("Could not load orders from API, using mock data")
+            // For now, we'll just use an empty array
+            setOrders([])
+          }
+        } catch (error) {
+          console.warn("Error loading orders:", error)
+          // For now, we'll just use an empty array
+          setOrders([])
+        }
       } catch (error) {
-        console.error("Erreur de récupération des commandes:", error)
+        console.error("Error loading data:", error)
+        // Fallback to mock data
+        const { getTables, getMenuItems } = require("@/lib/sharedDataService")
+        // fallback to mock data if needed
+        setTables([])
+        setMenuItems([])
         toast({
-          title: "Erreur",
-          description: "Échec du chargement des commandes",
-          variant: "destructive"
+          title: "Mode démo",
+          description: "Utilisation des données de démonstration (API non disponible)",
+          variant: "destructive",
         })
       } finally {
         setLoading(false)
       }
-    }
+    };
 
     const handleNewOrder = (data: Order) => {
-      setOrders(prevOrders => {
-        if (!prevOrders.some(order => order.id === data.id)) {
+      setOrders((prevOrders) => {
+        if (!prevOrders.some((order) => order.id === data.id)) {
           return [
             ...prevOrders,
             {
               ...data,
-              time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+              time: new Date().toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
               items: data.items || [],
               total: data.total || 0,
               notifiedKitchen: true,
               notifiedCashier: false,
-            }
-          ]
+            },
+          ];
         }
-        return prevOrders
-      })
-      setNewOrderNotification(true)
+        return prevOrders;
+      });
+      setNewOrderNotification(true);
       toast({
         title: "Nouvelle commande",
-        description: `Table ${data.tableNumber}: ${data.items?.length || 1} article(s)`,
-      })
-    }
+        description: `Table ${data.tableNumber}: ${
+          data.items?.length || 1
+        } article(s)`,
+      });
+    };
 
     const handleKitchenNotification = (data: Order) => {
-      setOrders(prevOrders =>
-        prevOrders.map(order =>
-          order.id === data.id ? { ...order, status: "preparing", notifiedKitchen: true } : order
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === data.id
+            ? { ...order, status: "preparing", notifiedKitchen: true }
+            : order
         )
-      )
+      );
       toast({
         title: "Notification cuisine",
         description: `Commande Table ${data.tableNumber} à préparer`,
-      })
-    }
+      });
+    };
 
+    let isMounted = true;
+    // let isMounted = true;
+    let subs: Promise<{ newOrderSub: any; kitchenNotifSub: any }>;
     const initialize = async () => {
       // if (!isLoggedIn || userRole !== "kitchen") {
       //   router.push("/login")
@@ -109,7 +179,7 @@ export default function KitchenInterface() {
       return { newOrderSub, kitchenNotifSub }
     }
 
-    const subs = initialize()
+    subs = initialize();
 
     return () => {
       subs.then(({ newOrderSub, kitchenNotifSub }) => {
@@ -118,17 +188,16 @@ export default function KitchenInterface() {
         notificationService.disconnect()
       })
     }
-  }, [router])
+  }, [])
 
   const updateOrderStatus = async (orderId: number, newStatus: "pending" | "preparing" | "ready" | "completed") => {
     try {
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      })
+      const response = await api.patch(`orders/${orderId}`, 
+        { status: newStatus },
+        { headers: { 'Content-Type': 'application/json' } }
+      )
 
-      if (!response.ok) throw new Error('Échec de la mise à jour')
+      if (response.status < 200 || response.status >= 300) throw new Error('Échec de la mise à jour')
 
       setOrders(prevOrders => 
         prevOrders.map(order => 
@@ -250,7 +319,7 @@ export default function KitchenInterface() {
                             <p className="font-medium">{item.name}</p>
                             <p className="text-sm text-neutral-500">
                               {Object.entries(item.options)
-                                .map(([key, value]) => `${value}`)
+                                .map(([_, value]) => `${value}`)
                                 .join(" • ")}
                             </p>
                           </div>
