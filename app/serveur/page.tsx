@@ -627,7 +627,7 @@ const categoryMap: { [key: number]: string } = {
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/placeholder.svg?height=40&width=40" />
+                <AvatarImage src="/server.jpg" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">SV</AvatarFallback>
               </Avatar>
               <span className="font-medium">Serveur</span>
@@ -914,18 +914,32 @@ const categoryMap: { [key: number]: string } = {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNewOrderDialogOpen(false)}>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsNewOrderDialogOpen(false)}>
               Annuler
-            </Button>
-            <Button
-              onClick={sendOrderToKitchen}
+              </Button>
+              <Button
+              onClick={async () => {
+                const prevTableId = selectedTable?.id;
+                await sendOrderToKitchen();
+                // If order sent successfully, update table status to "occupied" and color to blue
+                if (prevTableId) {
+                  setTables((prev) =>
+                    prev.map((t) =>
+                      t.id === prevTableId
+                        ? { ...t, status: "occupied" }
+                        : t
+                    )
+                  );
+                }
+                setIsNewOrderDialogOpen(false);
+              }}
               disabled={!newOrder || newOrder.items.length === 0}
               className="bg-blue-500 hover:bg-blue-600"
-            >
+              >
               Enregistrer la commande
-            </Button>
-          </DialogFooter>
+              </Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 

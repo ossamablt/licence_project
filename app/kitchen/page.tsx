@@ -5,23 +5,33 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { OlirabLogo } from "@/components/olirab-logo"
-import { Clock, CheckCircle, AlertCircle, ChefHat, LogOut } from "lucide-react"
+import { Clock, CheckCircle, AlertCircle, ChefHat, User, LogOut } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import notificationService from "@/lib/notificationService"
 import { getSharedOrders, setSharedOrders } from "@/lib/notificationService"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import api from "@/lib/api"
+// Types
+interface MenuItem {
+  id: number
+  name: string
+  category: string
+  price: number
+  image: string
+  size?: string
+  extras?: string[]
+}
 
 interface Order {
   id: number
   tableNumber: number
   time: string
-  status: "pending" | "preparing" | "ready" | "completed"
+  status: "En attente" | "En préparation" | "Prêt" | "Payée"
   items: {
     id: number
     name: string
-    size: string
-    options: { [key: string]: string }
+    quantity: string
     price: number
   }[]
   total: number
@@ -36,148 +46,181 @@ export default function KitchenInterface() {
   const [loading, setLoading] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
 
+  // Check authentication and load initial data
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    const fetchOrders = async () => {
-      try {
-        const response = await fetch('/api/orders')
-        const serverOrders = await response.json()
-        setOrders(serverOrders)
-        setSharedOrders(serverOrders)
-      } catch (error) {
-        console.error("Erreur de récupération des commandes:", error)
-        toast({
-          title: "Erreur",
-          description: "Échec du chargement des commandes",
-          variant: "destructive"
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
+    // if (!isLoggedIn || userRole !== "kitchen") {
+    //   router.push("/login")
+    //   return
+    // }
 
-    const handleNewOrder = (data: Order) => {
-      setOrders(prevOrders => {
-        if (!prevOrders.some(order => order.id === data.id)) {
-          return [
-            ...prevOrders,
-            {
-              ...data,
-              time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-              items: data.items || [],
-              total: data.total || 0,
-              notifiedKitchen: true,
-              notifiedCashier: false,
-            }
-          ]
-        }
-        return prevOrders
-      })
+    // Connect to notification service
+    notificationService.connect()
+
+    // Subscribe to new orders
+    const newOrderSubscription = notificationService.subscribe("order.new", (data) => {
+      setOrders((prevOrders) => [
+        ...prevOrders,
+        {
+          ...data,
+          time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+          items: data.items || [],
+          total: data.total || 0,
+          notifiedKitchen: true,
+          notifiedCashier: false,
+        },
+      ])
       setNewOrderNotification(true)
+
       toast({
         title: "Nouvelle commande",
         description: `Table ${data.tableNumber}: ${data.items?.length || 1} article(s)`,
       })
-    }
+    })
 
-    const handleKitchenNotification = (data: Order) => {
-      setOrders(prevOrders =>
-        prevOrders.map(order =>
-          order.id === data.id ? { ...order, status: "preparing", notifiedKitchen: true } : order
-        )
+    // Subscribe to kitchen notifications
+    const kitchenNotificationSubscription = notificationService.subscribe("kitchen.notification", (data) => {
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.id === data.id ? { ...order, status: "En préparation", notifiedKitchen: true } : order,
+        ),
       )
+
       toast({
         title: "Notification cuisine",
         description: `Commande Table ${data.tableNumber} à préparer`,
       })
-    }
+    })
 
-    const initialize = async () => {
-      // if (!isLoggedIn || userRole !== "kitchen") {
-      //   router.push("/login")
-      //   return
-      // }
+    // Load initial orders
+    setLoading(true)
+    getOrders()
+    setLoading(false)
 
-      notificationService.connect()
-      const newOrderSub = notificationService.subscribe("order.new", handleNewOrder)
-      const kitchenNotifSub = notificationService.subscribe("kitchen.notification", handleKitchenNotification)
-      
-      await fetchOrders()
-
-      return { newOrderSub, kitchenNotifSub }
-    }
-
-    const subs = initialize()
-
+    // Cleanup
     return () => {
-      subs.then(({ newOrderSub, kitchenNotifSub }) => {
-        notificationService.unsubscribe("order.new", newOrderSub)
-        notificationService.unsubscribe("kitchen.notification", kitchenNotifSub)
-        notificationService.disconnect()
-      })
+      notificationService.unsubscribe("order.new", newOrderSubscription)
+      notificationService.unsubscribe("kitchen.notification", kitchenNotificationSubscription)
+      notificationService.disconnect()
     }
   }, [router])
 
-  const updateOrderStatus = async (orderId: number, newStatus: "pending" | "preparing" | "ready" | "completed") => {
+  const getOrders = async () => {
     try {
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (!response.ok) throw new Error('Échec de la mise à jour')
-
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order.id === orderId ? { ...order, status: newStatus } : order
-        )
-      )
-      setSharedOrders(
-        orders.map((order: Order) =>
-          order.id === orderId ? { ...order, status: newStatus } : order
-        )
-      )
-
-      if (newStatus === "ready") {
-        const orderToNotify = orders.find(order => order.id === orderId)
-        if (orderToNotify) {
-          notificationService.publish("order.updated", { ...orderToNotify, status: newStatus }, "server")
-        }
+      setLoading(true);
+      const response = await api.get("/orders");
+      
+      if (response.status !== 200) {
+        throw new Error("Failed to fetch orders");
       }
-
-      toast({
-        title: "Statut mis à jour",
-        description: `La commande est maintenant ${getStatusText(newStatus).toLowerCase()}`,
-      })
-
-      if (newStatus === "preparing") setNewOrderNotification(false)
+  
+      console.log("Full API response:", response.data);
+      
+      // Check if orders exists and is an array
+      if (!response.data?.orders) {
+        throw new Error("Orders data is missing");
+      }
+  
+      if (!Array.isArray(response.data.orders)) {
+        // If it's not an array but exists, wrap it in an array
+        response.data.orders = [response.data.orders];
+      }
+  
+      const data: Order[] = response.data.orders.map((o: any) => {
+        // Ensure items exists and is an array
+        const items = Array.isArray(o.items) ? o.items : [];
+        
+        return {
+          id: o.id,
+          tableNumber: o.table_id,
+          time: o.time || new Date().toLocaleTimeString("fr-FR", { 
+            hour: "2-digit", 
+            minute: "2-digit" 
+          }),
+          status: o.status,
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity ?? "1",
+            price: item.price,
+          })),
+          total: o.total,
+          notifiedKitchen: o.notifiedKitchen ?? true,
+          notifiedCashier: o.notifiedCashier ?? false,
+        };
+      });
+  
+      setOrders(data);
+      setSharedOrders(data);
     } catch (error) {
-      console.error("Erreur de mise à jour:", error)
+      console.error("Error fetching orders:", error);
       toast({
         title: "Erreur",
-        description: "Échec de la mise à jour du statut",
-        variant: "destructive"
-      })
+        description: "Impossible de charger les commandes.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  
+
+  useEffect(() => {
+    getOrders();
+    console.log("Orders fetched:", orders);
+  }, []);
+  
+
+  // Update order status
+  const updateOrderStatus = (orderId: number, newStatus: "En attente" | "En préparation" | "Prêt" | "Payée") => {
+    // Update local state
+    const updatedOrders = orders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order))
+
+    setOrders(updatedOrders)
+    setSharedOrders(updatedOrders)
+
+    // If order is ready, notify server
+    if (newStatus === "Prêt") {
+      const orderToNotify = orders.find((order) => order.id === orderId)
+      if (orderToNotify) {
+        notificationService.publish("order.updated", { ...orderToNotify, status: newStatus }, "server")
+      }
+    }
+
+    // Show success toast
+    toast({
+      title: "Statut mis à jour",
+      description: `La commande est maintenant ${getStatusText(newStatus).toLowerCase()}`,
+    })
+
+    // Reset notification flag if we're starting to prepare an order
+    if (newStatus === "En préparation") {
+      setNewOrderNotification(false)
     }
   }
 
+  // Get status text in French
   const getStatusText = (status: string) => {
     switch (status) {
-      case "preparing": return "En préparation"
-      case "ready": return "Prêt"
-      case "pending": return "En attente"
-      case "completed": return "Terminé"
-      default: return status
+      case "preparing":
+        return "En préparation"
+      case "ready":
+        return "Prêt"
+      case "pending":
+        return "En attente"
+      case "completed":
+        return "Terminé"
+      default:
+        return status
     }
   }
 
-  // Filtrage des commandes
-  const pendingOrders = orders.filter(order => order.status === "pending" && order.notifiedKitchen)
-  const preparingOrders = orders.filter(order => order.status === "preparing")
-  const readyOrders = orders.filter(order => order.status === "ready")
+  // Filter orders by status
+  const pendingOrders = orders.filter((order) => order.status === "En attente" && order.notifiedKitchen)
+  const preparingOrders = orders.filter((order) => order.status === "En préparation" && order.notifiedKitchen)
+  const readyOrders = orders.filter((order) => order.status === "Prêt" && order.notifiedKitchen)
 
   if (loading) {
     return (
@@ -193,7 +236,7 @@ export default function KitchenInterface() {
   return (
     <div className="min-h-screen bg-blue-50/50">
       {/* Header */}
-      <header className="bg-white border-b border-neutral-200 px-4 py-3">
+      <header className="bg-orange-50 border-b border-orange-200 px-4 py-3">
         <div className="container mx-auto flex justify-between items-center">
           <OlirabLogo size="md" />
           <div className="flex items-center gap-4">
@@ -201,7 +244,7 @@ export default function KitchenInterface() {
               <span className="text-gray-600">Bienvenue</span>
               <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/cuisiner.jpeg?height=40&width=40" />
+                <AvatarImage src="/cuisinier.jpg" />
                
               </Avatar>
               </div>
@@ -234,7 +277,8 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle>Table {order.tableNumber}</CardTitle>
+                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
+
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
@@ -248,11 +292,7 @@ export default function KitchenInterface() {
                         <div key={index} className="flex justify-between items-start">
                           <div>
                             <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">
-                              {Object.entries(item.options)
-                                .map(([key, value]) => `${value}`)
-                                .join(" • ")}
-                            </p>
+                           
                           </div>
                         </div>
                       ))}
@@ -261,7 +301,7 @@ export default function KitchenInterface() {
                     <div className="mt-4">
                       <Button
                         className="w-full bg-blue-500 hover:bg-blue-600"
-                        onClick={() => updateOrderStatus(order.id, "preparing")}
+                        onClick={() => updateOrderStatus(order.id, "En préparation")}
                       >
                         <ChefHat className="h-4 w-4 mr-2" />
                         Commencer la préparation
@@ -292,7 +332,8 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle>Table {order.tableNumber}</CardTitle>
+                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
+
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
@@ -307,7 +348,7 @@ export default function KitchenInterface() {
                           <div>
                             <p className="font-medium">{item.name}</p>
                             <p className="text-sm text-neutral-500">
-                              {Object.entries(item.options)
+                              {Object.entries(item.id)
                                 .map(([key, value]) => `${value}`)
                                 .join(" • ")}
                             </p>
@@ -319,7 +360,7 @@ export default function KitchenInterface() {
                     <div className="mt-4">
                       <Button
                         className="w-full bg-green-500 hover:bg-green-600"
-                        onClick={() => updateOrderStatus(order.id, "ready")}
+                        onClick={() => updateOrderStatus(order.id, "Prêt")}
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Marquer comme prêt
@@ -350,7 +391,8 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <CardTitle>Table {order.tableNumber}</CardTitle>
+                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
+
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
@@ -364,11 +406,7 @@ export default function KitchenInterface() {
                         <div key={index} className="flex justify-between items-start">
                           <div>
                             <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">
-                              {Object.entries(item.options)
-                                .map(([key, value]) => `${value}`)
-                                .join(" • ")}
-                            </p>
+                            
                           </div>
                         </div>
                       ))}
@@ -378,7 +416,7 @@ export default function KitchenInterface() {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() => updateOrderStatus(order.id, "completed")}
+                        onClick={() => updateOrderStatus(order.id, "Prêt")}
                       >
                         Marquer comme terminé
                       </Button>

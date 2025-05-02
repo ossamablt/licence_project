@@ -57,7 +57,7 @@ export const LogoutConfirmationDialog: React.FC<LogoutConfirmationDialogProps> =
           <Button variant="outline" onClick={onClose}>
             Annuler
           </Button>
-          <Button variant="destructive" onClick={handleLogout}>
+          <Button variant="destructive" onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white">
             Déconnexion
           </Button>
         </DialogFooter>

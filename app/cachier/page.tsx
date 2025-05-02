@@ -44,14 +44,13 @@ export default function CashierPage() {
       <header className="bg-white border-b border-neutral-200 px-4 py-3">
         <div className="container mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <OlirabLogo size="sm" />
-            <h1 className="text-xl font-bold">Interface Caissier</h1>
+            <OlirabLogo size="lg" />
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-gray-600">Bienvenue</span>
               <Avatar className="h-8 w-8 border-2 border-orange-100">
-                <AvatarImage src="/cashier.jpeg?height=32&width=32" />
+                <AvatarImage src="/cachier.jpg" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">CA</AvatarFallback>
               </Avatar>
               <span className="font-medium">Caissier</span>

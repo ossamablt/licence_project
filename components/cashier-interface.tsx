@@ -138,45 +138,42 @@ export default function CashierInterface() {
 
   // Chargement des données au montage du composant et configuration du polling
   useEffect(() => {
-    loadData()
-    setMenuItems(getMenuItems())
-    fetchTodayReservations()
-
-
-// Fetch menu items from API
-const fetchMenuItems = async () => {
-  try {
-    const response = await api.get("/menuItems")
-    const transformedItems = response.data["Menu Items"].map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      category: categoryMap[item.catégory_id] || "Autre",
-      image: item.imageUrl || "/placeholder.svg",
-      is_available: item.is_available
-    }))
-    setMenuItems(transformedItems)
-  } catch (error) {
-    console.error("Failed to fetch menu items:", error)
-    toast({
-      title: "Erreur",
-      description: "Échec du chargement du menu",
-      variant: "destructive",
-    })
-  }
-}
-fetchMenuItems()
-
-
+    loadData();
+    fetchTodayReservations();
+  
+    // Fetch menu items from API
+    const fetchMenuItems = async () => {
+      try {
+        const response = await api.get("/menuItems");
+        const transformedItems = response.data["Menu Items"].map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          category: categoryMap[item.catégory_id] || "Autre",
+          image: item.imageUrl || "/placeholder.svg",
+          is_available: item.is_available
+        }));
+        setMenuItems(transformedItems);
+      } catch (error) {
+        console.error("Failed to fetch menu items:", error);
+        toast({
+          title: "Erreur",
+          description: "Échec du chargement du menu",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchMenuItems();
+  
     const intervalId = setInterval(() => {
-      loadData()
-    }, 5000) // Interrogation toutes les 5 secondes
-
+      loadData();
+    }, 5000);
+  
     return () => {
-      clearInterval(intervalId) // Nettoyage lors du démontage
-    }
-  }, [])
+      clearInterval(intervalId);
+    };
+  }, []);
 
   // Récupérer les réservations du jour
   const fetchTodayReservations = async () => {
@@ -191,34 +188,6 @@ fetchMenuItems()
       setTodayReservations(response.data.reservations) // ✅ Correct access
     } catch (error) {
       console.error("Échec de récupération des réservations du jour:", error)
-      // Create mock reservations as fallback formData
-      const mockReservations = [
-        {
-          id: 1,
-          client_name: "Jean Dupont",
-          client_phone: "0612345678",
-          date: new Date().toISOString().split("T")[0],
-          hour: "19:30:00",
-          duration: "2.00",
-          status: "pending",
-          tables_id: 1,
-          created_at: new Date().toISOString(),
-          table: { id: 1, num_table: 1, capacity: 4, created_at: null, updated_at: null },
-        },
-        {
-          id: 2,
-          client_name: "Marie Martin",
-          client_phone: "0687654321",
-          date: new Date().toISOString().split("T")[0],
-          hour: "20:00:00",
-          duration: "2.00",
-          status: "pending",
-          tables_id: 3,
-          created_at: new Date().toISOString(),
-          table: { id: 3, num_table: 3, capacity: 6, created_at: null, updated_at: null },
-        },
-      ]
-      setTodayReservations(mockReservations)
       toast({
         title: "Mode démo",
         description: "Utilisation des données de démonstration pour les réservations",
@@ -274,6 +243,26 @@ fetchMenuItems()
   useEffect(() => {
     fetchTables()
   }, [])
+
+
+  const deleteTable = async (tableId: number) => {
+    try {
+      await api.delete(`/tables/${tableId}`);
+      fetchTables(); // Refresh table list
+      toast({
+        title: "Succès",
+        description: "Table supprimée avec succès",
+      });
+    } catch (error) {
+      console.error("Erreur lors de la suppression de la table:", error);
+      toast({
+        title: "Erreur",
+        description: "Échec de la suppression de la table",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   // Charger les données depuis le service partagé
   const loadData = () => {
@@ -619,6 +608,7 @@ fetchMenuItems()
 
   // Obtenir la couleur du statut de la table
   const getTableStatusColor = (status: string) => {
+    console.log("Status received:", status); // Debug line
     switch (status) {
       case "free":
         return "border-green-300 bg-green-50"
@@ -753,19 +743,40 @@ fetchMenuItems()
   return (
     <div className="h-full flex flex-col">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="commandes" className="flex items-center gap-2">
+        <TabsList className="grid grid-cols-3 w-full bg-orange-50">
+          <TabsTrigger
+            value="commandes"
+            className={`flex items-center gap-2 border-b-2 ${
+              activeTab === "commandes"
+          ? "border-orange-500 text-orange-700"
+          : "border-transparent hover:border-orange-400"
+            }`}
+          >
             <ShoppingBag className="h-4 w-4" />
             Commandes
             {newOrderNotification && (
               <span className="ml-1 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">Nouveau</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="tables" className="flex items-center gap-2">
+          <TabsTrigger
+            value="tables"
+            className={`flex items-center gap-2 border-b-2 ${
+              activeTab === "tables"
+          ? "border-orange-500 text-orange-700"
+          : "border-transparent hover:border-orange-400"
+            }`}
+          >
             <Utensils className="h-4 w-4" />
             Tables
           </TabsTrigger>
-          <TabsTrigger value="planning" className="flex items-center gap-2">
+          <TabsTrigger
+            value="planning"
+            className={`flex items-center gap-2 border-b-2 ${
+              activeTab === "planning"
+          ? "border-orange-500 text-orange-700"
+          : "border-transparent hover:border-orange-400"
+            }`}
+          >
             <CalendarIcon className="h-4 w-4" />
             Planning
           </TabsTrigger>
@@ -1017,23 +1028,38 @@ fetchMenuItems()
                     className={`cursor-pointer hover:border-blue-300 transition-colors relative`}
                     onClick={() => selectTable(tableForSelection)}
                   >
-                    <CardHeader className="p-3 pb-0">
-                      <CardTitle className="text-sm flex justify-between items-center">
-                        <span>Table {table.num_table}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 rounded-full hover:bg-orange-100"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setSelectedTable(tableForSelection)
-                            setEditTableDialogOpen(true)
-                          }}
-                        >
-                          <Pencil className="h-3 w-3 text-orange-600" />
-                        </Button>
-                      </CardTitle>
-                    </CardHeader>
+                  <CardHeader className="p-3 pb-0">
+    <CardTitle className="text-sm flex justify-between items-center">
+      <span>Table {table.num_table}</span>
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 rounded-full hover:bg-orange-50"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedTable(tableForSelection);
+            setEditTableDialogOpen(true);
+          }}
+        >
+          <Pencil className="h-3 w-3 text-orange-600" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 rounded-full hover:bg-red-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm("Supprimer cette table ?")) {
+              deleteTable(table.id);
+            }
+          }}
+        >
+          <Trash2 className="h-3 w-3 text-red-600" />
+        </Button>
+      </div>
+    </CardTitle>
+  </CardHeader>
                     <CardContent className="p-3 pt-1">
                       <p className="text-lg font-bold text-blue-600">{table.capacity} places</p>
                       {hasActiveOrder && (
@@ -1552,50 +1578,39 @@ fetchMenuItems()
             </div>
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditTableDialogOpen(false)
-              }}
-            >
-              Annuler
-            </Button>
-            <Button
-              className="bg-orange-500 hover:bg-orange-600"
-              onClick={async () => {
-                try {
-                  if (selectedTable) {
-                    // Update existing table
-                    await api.put(`/tables/${selectedTable.id}`, tableFormData)
-                    toast({
-                      title: "Table modifiée",
-                      description: `La table ${tableFormData.num_table} a été modifiée avec succès`,
-                    })
-                  } else {
-                    // Add new table
-                    await api.post("/tables", tableFormData)
-                    toast({
-                      title: "Table ajoutée",
-                      description: `La table ${tableFormData.num_table} a été ajoutée avec succès`,
-                    })
-                  }
-                  // Refresh tables
-                  fetchTables()
-                  setEditTableDialogOpen(false)
-                } catch (error) {
-                  console.error("Erreur lors de l'opération sur la table:", error)
-                  toast({
-                    title: "Erreur",
-                    description: "Une erreur est survenue lors de l'opération",
-                    variant: "destructive",
-                  })
-                }
-              }}
-            >
-              {selectedTable ? "Enregistrer" : "Ajouter"}
-            </Button>
-          </DialogFooter>
+          <DialogFooter >
+      {selectedTable && (
+        <Button 
+          variant="destructive"
+          onClick={async () => {
+            if (confirm("Êtes-vous sûr de vouloir supprimer cette table ?")) {
+              await deleteTable(selectedTable.id);
+              setEditTableDialogOpen(false);
+            }
+          }}
+          className="mr-auto  bg-red-500"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          Supprimer
+        </Button>
+      )}
+      <Button
+        variant="outline"
+        onClick={() => {
+          setEditTableDialogOpen(false);
+        }}
+      >
+        Annuler
+      </Button>
+      <Button
+        className="bg-orange-500 hover:bg-orange-600"
+        onClick={async () => {
+          // ... existing save logic ...
+        }}
+      >
+        {selectedTable ? "Enregistrer" : "Ajouter"}
+      </Button>
+    </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
