@@ -118,7 +118,7 @@ export default function KitchenInterface() {
   
       console.log("Full API response:", response.data);
       
-      // Check if orders exists and is an array
+   
       if (!response.data?.orders) {
         throw new Error("Orders data is missing");
       }

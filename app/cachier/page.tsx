@@ -19,10 +19,10 @@ export default function CashierPage() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    // if (!isLoggedIn || userRole !== "cachier") {
-    // router.push("/")
-    // return
-    // }
+    if (!isLoggedIn || userRole !== "Caissier") {
+    router.push("/")
+    return
+    }
 
     setLoading(false)
   }, [router])
@@ -53,7 +53,7 @@ export default function CashierPage() {
                 <AvatarImage src="/cachier.jpg" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">CA</AvatarFallback>
               </Avatar>
-              <span className="font-medium">Caissier</span>
+              <span className="font-medium">{localStorage.getItem("username")}</span>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
               <LogOut className="h-5 w-5" />

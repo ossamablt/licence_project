@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -70,10 +71,10 @@ export default function RestaurantManagement() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    if (!isLoggedIn || userRole !== "Gérant") {
-      router.push("/")
-    }
-  }, [router])
+//   if (!isLoggedIn  userRole !== "Gérant") {
+  //     router.push("/")
+  //   }
+   }, [router])
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -123,62 +124,61 @@ export default function RestaurantManagement() {
   }
 
   return (
-    <div className="flex h-screen bg-orange-50/50 text-gray-800 relative">
+    <div className="flex  bg-orange-50/50 text-gray-800 relative">
       {/* Mobile menu button */}
-      <div className="md:hidden fixed top-4 left-4 z-30">
-        <Button variant="outline" size="icon" className="bg-white" onClick={() => setSidebarOpen(!sidebarOpen)}>
-          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+     
+        {/* Sidebar */}
+       {/* Sidebar */}
+<div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md overflow-y-auto`}>
+  <div className="p-6 border-b">
+    <OlirabLogo size="lg" />
+  </div>
+  <div className="mt-4">
+    <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Menu</p>
+    {["employees", "stock", "accounting", "menu"].map(section => (
+      <div
+        key={section}
+        className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${activeSection === section ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700" : "text-gray-600 hover:bg-orange-50/50"}`}
+        onClick={() => {
+          setActiveSection(section as any)
+          if (isMobile) setSidebarOpen(false)
+        }}
+      >
+        {section === "employees" && <User className="h-4 w-4" />}
+        {section === "stock" && <Package className="h-4 w-4" />}
+        {section === "accounting" && <CreditCard className="h-4 w-4" />}
+        {section === "menu" && <UtensilsCrossed className="h-4 w-4" />}
+        {section.charAt(0).toUpperCase() + section.slice(1)}
       </div>
-
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 transition-transform duration-300 fixed md:static z-20 h-full w-64 bg-white shadow-md`}>
-        <div className="p-6 border-b">
-          <OlirabLogo size="lg" />
-        </div>
-        <div className="mt-4">
-          <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Menu</p>
-          {["employees", "stock", "accounting", "menu"].map(section => (
-            <div
-              key={section}
-              className={`py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 ${
-                activeSection === section
-                  ? "bg-orange-50 border-l-4 border-orange-500 text-orange-700"
-                  : "text-gray-600 hover:bg-orange-50/50"
-              }`}
-              onClick={() => {
-                setActiveSection(section as any)
-                if (isMobile) setSidebarOpen(false)
-              }}
-            >
-              {section === "employees" && <User className="h-4 w-4" />}
-              {section === "stock" && <Package className="h-4 w-4" />}
-              {section === "accounting" && <CreditCard className="h-4 w-4" />}
-              {section === "menu" && <UtensilsCrossed className="h-4 w-4" />}
-              {section.charAt(0).toUpperCase() + section.slice(1)}
-            </div>
-          ))}
-          <div className="mt-4 border-t pt-4">
-            <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Interfaces</p>
-            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/server")}>
-              <Coffee className="h-4 w-4" />
-              Serveur
-            </div>
-            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/kitchen")}>
-              <ChefHat className="h-4 w-4" />
-              Cuisine
-            </div>
-            <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/cashier")}>
-              <CreditCard className="h-4 w-4" />
-              Caissier
-            </div>
-          </div>
-        </div>
+    ))}
+    <div className="mt-4 border-t pt-4">
+      <p className="px-6 text-gray-400 text-sm uppercase font-medium mb-2">Interfaces</p>
+      <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/server")}>
+        <Coffee className="h-4 w-4" />
+        Serveur
       </div>
+      <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/kitchen")}>
+        <ChefHat className="h-4 w-4" />
+        Cuisine
+      </div>
+      <div className="py-3 px-6 cursor-pointer transition-colors flex items-center gap-2 text-gray-600 hover:bg-orange-50/50" onClick={() => router.push("/cashier")}>
+        <CreditCard className="h-4 w-4" />
+        Caissier
+      </div>
+    </div>
+  </div>
+</div>
 
       {/* Main content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="flex justify-between items-center mb-6">
+            {/* Mobile menu button */}
+            <div className="md:hidden top-4 left-4 z-30">
+              <Button variant="outline" size="icon" className="bg-white" onClick={() => setSidebarOpen(!sidebarOpen)}>
+                   {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+           </div>
+
           <h1 className="text-2xl font-bold">
             {activeSection === "employees" && "Gestion des Employés"}
             {activeSection === "stock" && "Gestion du Stock"}
@@ -186,6 +186,7 @@ export default function RestaurantManagement() {
             {activeSection === "menu" && "Gestion du Menu"}
           </h1>
           <div className="flex items-center gap-4">
+          
             <Button variant="ghost" onClick={() => setNotificationsOpen(!notificationsOpen)}>
               <Bell className="h-5 w-5" />
               {unreadCount > 0 && (
@@ -195,10 +196,10 @@ export default function RestaurantManagement() {
             <div className="hidden md:flex items-center gap-2">
               <p className="text-gray-600">Bienvenue</p>
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/admin.jpg" />
+                <AvatarImage src="/admin.jpeg?height=40&width=40" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
               </Avatar>
-              <span className="font-medium">{localStorage.getItem("username") || "Gérant"}</span>
+              <span className="font-medium">{localStorage.getItem("username")}</span>
             </div>
             <Button variant="destructive" onClick={() => setShowLogoutConfirmation(true)}>
               <LogOut className="h-4 w-4 mr-2" />
@@ -259,8 +260,7 @@ export default function RestaurantManagement() {
           </div>
         )}
       </div>
-
-      {/* Logout Dialog */}
+{/* Logout Dialog */}
       <LogoutConfirmationDialog isOpen={showLogoutConfirmation} onClose={() => setShowLogoutConfirmation(false)} />
     </div>
   )

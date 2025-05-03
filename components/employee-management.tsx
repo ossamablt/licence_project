@@ -87,11 +87,15 @@ export function EmployeeManagement() {
     try {
       // Delete employee from the backend
       await api.delete(`/employes/${id}`)
-  
+
       // Remove employee locally from state
       setEmployees(employees.filter((emp) => emp.id !== id))
+
+      // Show success alert
+      window.alert("Employé supprimé avec succès.")
     } catch (error) {
       console.error("Erreur lors de la suppression de l'employé", error)
+      window.alert("Erreur lors de la suppression de l'employé.")
     }
   }
 
@@ -364,7 +368,7 @@ export function EmployeeManagement() {
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={employee.avatar || `/placeholder.svg?height=32&width=32`} />
-                      <AvatarFallback className="bg-orange-100 text-orange-700 text-xs">
+                      <AvatarFallback className="bg-yellow-100 text-yellow-800">
                         {employee.name
                           .split(" ")
                           .map((n) => n[0])

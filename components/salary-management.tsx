@@ -289,7 +289,7 @@ export function SalaryManagement() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={addNewSalary}>Enregistrer</Button>
+                <Button onClick={addNewSalary} className=" bg-red-400 ">Enregistrer</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -433,7 +433,7 @@ export function SalaryManagement() {
                                 </Select>
                               </div>
                             </div>
-                            <DialogFooter>
+                            <DialogFooter className=" bg-red-400">
                               <Button onClick={saveEditedSalary}>Enregistrer</Button>
                             </DialogFooter>
                           </DialogContent>

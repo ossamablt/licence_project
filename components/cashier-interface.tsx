@@ -788,13 +788,13 @@ export default function CashierInterface() {
             <div className="mb-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold">Menu</h3>
-                <div className="flex gap-2">
-                  <Select
+                <div className="flex gap-2 ">
+                  <Select 
                     value={newOrder.type}
                     onValueChange={(value: "sur place" | "à emporter" | "livraison") =>
                       setNewOrder({ ...newOrder, type: value })
                     }
-                  >
+                       >
                     <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Type de commande" />
                     </SelectTrigger>
@@ -1342,7 +1342,7 @@ export default function CashierInterface() {
             <Button onClick={handleProcessPayment}>
               {paymentMethod === "carte" ? (
                 <>
-                  <CreditCard className="h-4 w-4 mr-2" />
+                  <CreditCard className="h-4 w-4 mr-2 " />
                   Payer par carte
                 </>
               ) : paymentMethod === "espèces" ? (
@@ -1369,8 +1369,18 @@ export default function CashierInterface() {
           <div className="border rounded-md p-4 my-4">
             <div ref={receiptRef}>
               <div className="header">
+                <div className="flex justify-center mb-2">
+                  <Image
+                    src="/ll.png"
+                    alt="OLIRAB FAST FOOD Logo"
+                    width={60}
+                    height={60}
+                    className="mx-auto"
+                    priority
+                  />
+                </div>
                 <h3 className="text-lg font-bold">OLIRAB FAST FOOD</h3>
-                <p>123 Rue de Paris, 75001 Paris</p>
+                <p>50 Rue de jijel, ben ch3ibon  </p>
                 <p>Tel: 01 23 45 67 89</p>
                 <p>{format(new Date(), "dd/MM/yyyy HH:mm")}</p>
               </div>
@@ -1424,17 +1434,30 @@ export default function CashierInterface() {
               <div className="divider"></div>
 
               <div className="footer">
+                 <div className="border p-1.5 rounded">
+                    <Image
+                      src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://olirab-fastfood.com/menu"
+                      alt="QR Code Menu"
+                      width={80}
+                      height={80}
+                      className="print:w-16 print:h-16"
+                    />
+                  </div>
                 <p>Merci de votre visite!</p>
                 <p>TVA: FR 12 345 678 901</p>
+
+               
               </div>
+             
+                
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter >
             <Button variant="outline" onClick={() => setReceiptDialogOpen(false)}>
               Fermer
             </Button>
-            <Button onClick={printReceipt}>
+            <Button onClick={printReceipt} className="bg-green-500 hover:bg-green-600 text-white">
               <Printer className="h-4 w-4 mr-2" />
               Imprimer le ticket
             </Button>
@@ -1477,7 +1500,7 @@ export default function CashierInterface() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 bg-amber-100">
               <div className="space-y-2">
                 <Label>Date</Label>
                 <Popover>

@@ -21,6 +21,7 @@ import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialo
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import api from "@/lib/api"
 import type { MenuItem as BaseMenuItem, Table, OrderItem } from "@/lib/sharedDataService"
+import { get } from "http"
 
 type MenuItem = BaseMenuItem & {
   imageUrl?: string
@@ -35,8 +36,7 @@ interface TableOrder {
   status: "En attente" | "En préparation" | "Prête" | "Payée"
   items: orderItems[]
   total: number
-  notifiedKitchen: boolean
-  notifiedCashier: boolean
+
 }
 export interface orderItems {
   id: number
@@ -76,16 +76,28 @@ const categoryMap: { [key: number]: string } = {
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
-
-    
     if (!isLoggedIn || userRole !== "Serveur") {
       router.push("/")
       return
     }
     // Load initial data
     loadData()
+    console.log("Loading data...")
+    
   }, [router])
 
+
+  //get item name 
+   async function getItemNameById(itemId : BigInteger) {
+    try {
+      const response = await api.get(`/menuItems/${itemId}`);
+      return response.data.menu_item.name;
+    } catch (error) {
+      console.error("Error fetching item name:", error);
+      return null;
+    }
+  }
+  
   // Load data from API service
   const loadData = async () => {
     setLoading(true)
@@ -125,66 +137,52 @@ const categoryMap: { [key: number]: string } = {
         }
       } catch (error) {
         console.warn("Error loading menu items:", error)
-        // Fallback to mock data
-        const { getMenuItems } = require("@/lib/sharedDataService")
-        setMenuItems(getMenuItems())
       }
       // Get orders orderPayload 
       try {
         const ordersResponse = await api.get("/orders")
         if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
-          setOrders(
-            ordersResponse.data.orders.map((order: any) => {
-              const orderItems = order.order_details.map((detail: any, index: number) => {
-                const menuItem = menuItems.find((item) => item.id === detail.item_id)
-                return {
-                  id: index + 1,
-                  menuItemId: detail.item_id,
-                  name: menuItem ? menuItem.name : (detail.name || `Article #${detail.item_id}`),
-                  price: detail.price,
-                  quantity: detail.quantity,
-                }
-              })
-
+          const ordersWithItems = await Promise.all(
+            ordersResponse.data.orders.map(async (order: any) => {
+              // Process order items with async/await
+              const orderItems = await Promise.all(
+                order.order_details.map(async (detail: any, index: number) => {
+                  const itemName = await getItemNameById(detail.item_id);
+                  return {
+                    id: index + 1,
+                    menuItemId: detail.item_id,
+                    name: itemName || `Item #${detail.item_id}`, // Fallback name
+                    price: detail.price,
+                    quantity: detail.quantity,
+                  };
+                })
+              );
+      
               return {
                 id: order.id,
                 tableNumber: order.table_id,
                 time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
                 status: order.status,
                 items: orderItems,
-                total: orderItems.reduce((sum: number, item: { price: number; quantity: number }) => sum + (item.price * item.quantity), 0),
+                total: orderItems.reduce((sum: number, item) => sum + (item.price * item.quantity), 0),
                 notifiedKitchen: order.notified_kitchen || false,
                 notifiedCashier: order.notified_cashier || false,
-              }
-             
-            }),
-          )
-        } else {
-          console.warn("Could not load orders from API, using mock data")
-          // For now, we'll just use an empty array
-          setOrders([])
+              };
+            })
+          );
+          
+          setOrders(ordersWithItems);
         }
-      } catch (error) {
-        console.warn("Error loading orders:", error)
-        // For now, we'll just use an empty array
-        setOrders([])
-      }
-    } catch (error) {
-      console.error("Error loading data:", error)
-      // Fallback to mock data
-      const { getTables, getMenuItems } = require("@/lib/sharedDataService")
-      setTables(getTables())
-      setMenuItems(getMenuItems())
-      setOrders([])
-      toast({
-        title: "Mode démo",
-        description: "Utilisation des données de démonstration (API non disponible)",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+          } catch (error) {
+            console.error("Error loading orders:", error);
+            setOrders([]);
+          }
+        } catch (error) {
+          console.error("Erreur lors du chargement des données :", error);
+        } finally {
+          setLoading(false);
+        }
+      };
 
   // Start new order
   const startNewOrder = () => {
@@ -243,8 +241,7 @@ const categoryMap: { [key: number]: string } = {
             status: order.status,
             items: orderItems,
             total: order.total_price,
-            notifiedKitchen: order.notified_kitchen || false,
-            notifiedCashier: order.notified_cashier || false,
+          
           })
         } else {
           // Create new order if no order found
@@ -257,8 +254,7 @@ const categoryMap: { [key: number]: string } = {
             type: "A place",
             user_id: 1,
             total: 0,
-            notifiedKitchen: false,
-            notifiedCashier: false,
+       
           })
         }
       } catch (error) {
@@ -273,8 +269,7 @@ const categoryMap: { [key: number]: string } = {
           status: "En attente",
           items: [],
           total: 0,
-          notifiedKitchen: false,
-          notifiedCashier: false,
+          
         })
       }
     } else {
@@ -288,8 +283,7 @@ const categoryMap: { [key: number]: string } = {
         type: "A place",
         user_id: Number(localStorage.getItem("userId")) || 1,
         total: 0,
-        notifiedKitchen: false,
-        notifiedCashier: false,
+    
       })
     }
 
@@ -339,6 +333,36 @@ const categoryMap: { [key: number]: string } = {
     })
   }
 
+
+
+  const deleteOrder = async (orderId: number) => {
+    try {
+      // Send DELETE request to the API
+      const response = await api.delete(`/orders/${orderId}`);
+      if (response.data && response.data.success) {
+        // Remove the order from the local state
+        setOrders((prevOrders) => prevOrders.filter((order) => order.id !== orderId));
+  
+        toast({
+          title: "Commande supprimée",
+          description: "La commande a été supprimée avec succès.",
+        });
+      } else {
+        toast({
+          title: "Erreur",
+          description: response.data?.message || "Impossible de supprimer la commande.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite lors de la suppression de la commande.",
+        variant: "destructive",
+      });
+    }
+  };
   // Calculate total
   const calculateTotal = (items: OrderItem[]): number => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -503,7 +527,7 @@ const categoryMap: { [key: number]: string } = {
   // Filter orders based on search term
   const filteredOrders = orders.filter(
     (order) =>
-      order.items.some((item) => item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      order.items.some((item) => typeof item.name === "string" && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       order.tableNumber.toString().includes(searchTerm),
   )
 
@@ -631,84 +655,62 @@ const categoryMap: { [key: number]: string } = {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredOrders.map((order) => (
                 <Card key={order.id} className="relative overflow-hidden">
-                  <div
-                    className={`absolute top-0 left-0 w-1 h-full ${
-                      order.status === "En préparation"
-                        ? "bg-blue-500"
-                        : order.status === "Prête"
-                          ? "bg-green-500"
-                          : order.status === "Payée"
-                            ? "bg-gray-500"
-                            : "bg-yellow-500"
-                    }`}
-                  />
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle>Table {order.tableNumber}</CardTitle>
-                        <div className="flex items-center text-sm text-neutral-500 mt-1">
-                          <Clock className="h-4 w-4 mr-1" />
-                          {order.time}
-                        </div>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {order.items.map((item) => (
-                        <div key={item.id} className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
-                          </div>
-                          <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
-                        </div>
-                      ))}
-                      <div className="pt-3 border-t mt-3">
-                        <div className="flex justify-between font-medium">
-                          <span>Total</span>
-                          <span>{formatPrice(order.total)}</span>
-                        </div>
+                <div
+                  className={`absolute top-0 left-0 w-1 h-full ${
+                    order.status === "En préparation"
+                      ? "bg-blue-500"
+                      : order.status === "Prête"
+                      ? "bg-green-500"
+                      : order.status === "Payée"
+                      ? "bg-gray-500"
+                      : "bg-yellow-500"
+                  }`}
+                />
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>Table {order.tableNumber}</CardTitle>
+                      <div className="flex items-center text-sm text-neutral-500 mt-1">
+                        <Clock className="h-4 w-4 mr-1" />
+                        {order.time}
                       </div>
                     </div>
-
-                    <div className="flex gap-2 mt-4">
-                      {order.status === "En attente" && !order.notifiedKitchen && (
-                        <Button variant="outline" className="w-full" onClick={() => notifyKitchen(order.id)}>
-                          <ChefHat className="h-4 w-4 mr-2" />
-                          Notifier la cuisine
-                        </Button>
-                      )}
-
-                      {order.status === "Prête" && !order.notifiedCashier && (
-                        <Button variant="outline" className="w-full" onClick={() => notifyCashier(order.id)}>
-                          <CreditCard className="h-4 w-4 mr-2" />
-                          Notifier le caissier
-                        </Button>
-                      )}
-
-                      {order.status === "Prête" && (
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => {
-                            // Notify the customer
-                            toast({
-                              title: "Client notifié",
-                              description: "Le client a été notifié que sa commande est prête",
-                            })
-                          }}
-                        >
-                          <Bell className="h-4 w-4 mr-2" />
-                          Notifier le client
-                        </Button>
-                      )}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {order.items.map((item) => (
+                      <div key={item.id} className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
+                        </div>
+                        <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
+                      </div>
+                    ))}
+                    <div className="pt-3 border-t mt-3">
+                      <div className="flex justify-between font-medium">
+                        <span>Total</span>
+                        <span>{formatPrice(order.total)}</span>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+              
+                    <div className="flex gap-2 mt-4 bg-red-400 hover:accent-red-700 border-red-700 border rounded-[10px]">
+                    {/* Add Delete Button */}
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={() => deleteOrder(order.id)}
+                    >
+                      Supprimer
+                    </Button>
+                    </div>
+                </CardContent>
+              </Card>
               ))}
 
               {filteredOrders.length === 0 && (

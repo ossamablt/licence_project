@@ -31,7 +31,7 @@ interface MenuItem {
   description: string
   price: number
   catégory_id: number
-  is_available: boolean
+  isAvailable: boolean
   imageUrl: string
 }
 
@@ -185,7 +185,7 @@ export function MenuManagement() {
     try {
       if (isEditMode && selectedItem) {
         const response = await api.put(`/menuItems/${selectedItem.id}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: { "Content-Type": "application/json" },
         })
 
         setMenuItems((prev) =>
@@ -312,7 +312,7 @@ export function MenuManagement() {
       description: item.description,
       price: item.price,
       catégory_id: item.catégory_id,
-      is_available: item.is_available,
+      is_available: item.isAvailable,
       imageUrl: item.imageUrl,
     })
     setIsEditMode(true)
@@ -600,7 +600,7 @@ return (
             {filteredItems.map((item) => (
               <Card
                 key={item.id}
-                className={`overflow-hidden hover:shadow-md transition-shadow ${!item.is_available ? "opacity-500" : ""}`}
+                className={`overflow-hidden hover:shadow-md transition-shadow ${!item.isAvailable ? "opacity-500" : ""}`}
               >
                 <div className="relative h-60 w-full">
                   <Image
@@ -998,9 +998,9 @@ return (
                 <Tag className="h-4 w-4 text-orange-500" />
                 <span className="text-sm font-medium">{categoryMap[selectedItem.catégory_id]}</span>
                 <span
-                  className={`ml-auto text-xs px-2 py-0.5 rounded-full ${selectedItem.is_available ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                  className={`ml-auto text-xs px-2 py-0.5 rounded-full ${selectedItem.isAvailable ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
                 >
-                  {selectedItem.is_available ? "Disponible" : "Indisponible"}
+                  {selectedItem.isAvailable ? "Disponible" : "Indisponible"}
                 </span>
               </div>
               <div>
