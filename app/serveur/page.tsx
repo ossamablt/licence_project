@@ -32,7 +32,7 @@ interface TableOrder {
   user_id: number
   type: string
   time: string
-  status: "pending" | "preparing" | "ready" | "completed"
+  status: "En attente" | "En préparation" | "Prête" | "Payée"
   items: orderItems[]
   total: number
   notifiedKitchen: boolean
@@ -72,7 +72,6 @@ const categoryMap: { [key: number]: string } = {
   7: "Boissons",
  
 }
-
   // Check authentication and load initial data
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
@@ -85,49 +84,21 @@ const categoryMap: { [key: number]: string } = {
     }
     // Load initial data
     loadData()
-
-    // Set up polling for data refresh
-    const intervalId = setInterval(() => {
-      loadData()
-    }, 5000) 
-
-    return () => {
-      clearInterval(intervalId) // Clean up on unmount
-    }
   }, [router])
 
   // Load data from API service
   const loadData = async () => {
     setLoading(true)
     try {
-      // Get tables
-      try {
-        const tablesResponse = await api.get("/tables")
-        if (tablesResponse.data && Array.isArray(tablesResponse.data.tables)) {
-          setTables(
-            tablesResponse.data.tables.map((table: any) => ({
-              id: table.id,
-              number: table.number,
-              seats: table.capacity,
-              status: table.status || "free",
-              orderId: table.order_id || null,
-            })),
-          )
-        } else {
-          console.warn("Could not load tables from API, using mock data")
-          // Fallback to mock data
-          const { getTables } = require("@/lib/sharedDataService")
-          setTables(getTables())
-          toast({
-            title: "Mode démo",
-            description: "Utilisation des données de démonstration pour les tables",
-          })
-        }
-      } catch (error) {
-        console.warn("Error loading tables:", error)
-        // Fallback to mock data
-        const { getTables } = require("@/lib/sharedDataService")
-        setTables(getTables())
+      const tablesResponse = await api.get("/tables")
+      if (tablesResponse.data?.tables) {
+        setTables(tablesResponse.data.tables.map((table: any) => ({
+          id: table.id,
+          number: table.num_table,
+          seats: table.capacity,
+          status: table.status, // Utiliser directement le statut de la BDD
+          orderId: table.order_id
+        })))
       }
 
       // Get menu items
@@ -146,9 +117,7 @@ const categoryMap: { [key: number]: string } = {
           )
         } else {
           console.warn("Could not load menu items from API, using mock data")
-          // Fallback to mock data
-          const { getMenuItems } = require("@/lib/sharedDataService")
-          setMenuItems(getMenuItems())
+          
           toast({
             title: "Mode démo",
             description: "Utilisation des données de démonstration pour le menu",
@@ -160,7 +129,6 @@ const categoryMap: { [key: number]: string } = {
         const { getMenuItems } = require("@/lib/sharedDataService")
         setMenuItems(getMenuItems())
       }
-
       // Get orders orderPayload 
       try {
         const ordersResponse = await api.get("/orders")
@@ -172,7 +140,7 @@ const categoryMap: { [key: number]: string } = {
                 return {
                   id: index + 1,
                   menuItemId: detail.item_id,
-                  name: menuItem ? menuItem.name : `Article #${detail.item_id}`,
+                  name: menuItem ? menuItem.name : (detail.name || `Article #${detail.item_id}`),
                   price: detail.price,
                   quantity: detail.quantity,
                 }
@@ -284,7 +252,7 @@ const categoryMap: { [key: number]: string } = {
             id: Math.floor(Math.random() * 10000),
             tableNumber: table.number,
             time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-            status: "pending",
+            status: "En attente",
             items: [],
             type: "A place",
             user_id: 1,
@@ -302,7 +270,7 @@ const categoryMap: { [key: number]: string } = {
           user_id: Number(localStorage.getItem("userId")) || 1,
           type: "A place",
           time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-          status: "pending",
+          status: "En attente",
           items: [],
           total: 0,
           notifiedKitchen: false,
@@ -315,7 +283,7 @@ const categoryMap: { [key: number]: string } = {
         id: Math.floor(Math.random() * 10000),
         tableNumber: table.number,
         time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-        status: "pending",
+        status: "En attente",
         items: [],
         type: "A place",
         user_id: Number(localStorage.getItem("userId")) || 1,
@@ -336,7 +304,7 @@ const categoryMap: { [key: number]: string } = {
     const existingItem = newOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
 
     if (existingItem) {
-      // Increment quantity if item already exists
+      // Increment quantity if item alPrête exists
       const updatedItems = newOrder.items.map((orderItem) =>
         orderItem.menuItemId === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
       )
@@ -406,68 +374,78 @@ const categoryMap: { [key: number]: string } = {
       const orderPayload = {
         user_id: localStorage.getItem("userId") || 1,
         table_id: selectedTable.id,
-        type: "A table", // Match API enum
-        esstimation_time: "00:30:00", // Proper time format
-        delivry_adress: null, // Use null instead of empty string
-        delivry_phone: null, // Use null instead of empty string
+        type: "A table",
+        esstimation_time: "00:30:00",
+        delivry_adress: null,
+        delivry_phone: null,
         orderDetails: newOrder.items.map((item) => ({
-          item_id: item.menuItemId, // Correct key name
+          item_id: item.menuItemId,
           quantity: item.quantity,
           price: item.price,
         })),
       }
-  
 
-      // Send the order to the API Get
+      // Send the order to the API
       const response = await api.post("/orders", orderPayload)
 
-      if (response.data && response.data.success) {
-        toast({
-          title: "Commande envoyée",
-          description: "La commande a été envoyée à la cuisine",
-        })
-
-        // Update tables
-        setTables(
-          tables.map((t) =>
-            t.id === selectedTable.id ? { ...t, status: "occupied", orderId: response.data.order_id } : t,
-          ),
-        )
-
-        // Reset current order Item #undefined
-        setNewOrder(null)
-        setSelectedTable(null)
-        setIsNewOrderDialogOpen(false)
-
-        // Refresh data
-        loadData()
-      } else {
-        toast({
-          title: "Erreur",
-          description: response.data?.message || "Impossible de créer la commande",
-          variant: "destructive",
-        })
+      if (response.data?.success) {
+        try {
+          // 1. Mettre à jour la table DANS LA BASE DE DONNÉES d'abord
+          const tableUpdate = await api.put(`/tables/${selectedTable.id}`, {
+            status: "occupied",
+            order_id: response.data.order_id,
+          });
+    
+          // 2. Mettre à jour l'état local SEULEMENT si la BDD est mise à jour
+          if (tableUpdate.data.success) {
+            setTables(prev => prev.map(t => 
+              t.id === selectedTable.id ? { 
+                ...t, 
+                status: "occupied",
+                orderId: response.data.order_id 
+              } : t
+            ));
+          }
+    
+          // 3. Fermer la dialog et reset les états
+          setNewOrder(null);
+          setSelectedTable(null);
+          setIsNewOrderDialogOpen(false);
+    
+          // 4. Forcer un rechargement des données
+          await loadData();
+    
+        } catch (err) {
+          console.error("Erreur de mise à jour de la table:", err);
+          toast({
+            title: "Erreur critique",
+            description: "La table n'a pas pu être marquée comme occupée",
+            variant: "destructive"
+          });
+          // Annuler les changements locaux si l'update BDD échoue
+          setTables(prev => prev.map(t => 
+            t.id === selectedTable.id ? { ...t, status: "free" } : t
+          ));
+        }
       }
     } catch (error) {
-      console.error("Error creating order:", error)
+      console.error("Erreur lors de l'envoi de la commande :", error)
       toast({
-        title: "Erreur de connexion",
-        description: "Impossible de se connecter au serveur",
+        title: "Erreur",
+        description: "Impossible d'envoyer la commande à la cuisine",
         variant: "destructive",
       })
     }
   }
-
   // Notify kitchen
   const notifyKitchen = async (orderId: number) => {
     try {
       const response = await api.post(`/orders/${orderId}/notify-kitchen`)
-
       if (response.data && response.data.success) {
         // Update order status locally
         setOrders(
           orders.map((order) =>
-            order.id === orderId ? { ...order, status: "preparing", notifiedKitchen: true } : order,
+            order.id === orderId ? { ...order, status: "En préparation", notifiedKitchen: true } : order,
           ),
         )
 
@@ -536,13 +514,13 @@ const categoryMap: { [key: number]: string } = {
   // Get status color
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "preparing":
+      case "En préparation":
         return "bg-blue-100 text-blue-800"
-      case "ready":
+      case "Prête":
         return "bg-green-100 text-green-800"
-      case "pending":
+      case "En attente":
         return "bg-yellow-100 text-yellow-800"
-      case "completed":
+      case "Payée":
         return "bg-gray-100 text-gray-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -552,13 +530,13 @@ const categoryMap: { [key: number]: string } = {
   // Get status text in French
   const getStatusText = (status: string) => {
     switch (status) {
-      case "preparing":
+      case "En préparation":
         return "En préparation"
-      case "ready":
+      case "Prête":
         return "Prêt"
-      case "pending":
+      case "En attente":
         return "En attente"
-      case "completed":
+      case "Payée":
         return "Terminé"
       default:
         return status
@@ -568,7 +546,7 @@ const categoryMap: { [key: number]: string } = {
   // Get table status color
   const getTableStatusColor = (status: string) => {
     switch (status) {
-      case "free":
+      case "available":
         return "bg-green-100 border-green-300"
       case "occupied":
         return "bg-blue-100 border-blue-300"
@@ -582,14 +560,10 @@ const categoryMap: { [key: number]: string } = {
   // Get table status text
   const getTableStatusText = (status: string) => {
     switch (status) {
-      case "free":
-        return "Libre"
-      case "occupied":
-        return "Occupée"
-      case "reserved":
-        return "Réservée"
-      default:
-        return status
+      case "available": return "Libre"
+      case "occupied": return "Occupée"
+      case "reserved": return "Réservée"
+      default: return status
     }
   }
 
@@ -659,11 +633,11 @@ const categoryMap: { [key: number]: string } = {
                 <Card key={order.id} className="relative overflow-hidden">
                   <div
                     className={`absolute top-0 left-0 w-1 h-full ${
-                      order.status === "preparing"
+                      order.status === "En préparation"
                         ? "bg-blue-500"
-                        : order.status === "ready"
+                        : order.status === "Prête"
                           ? "bg-green-500"
-                          : order.status === "completed"
+                          : order.status === "Payée"
                             ? "bg-gray-500"
                             : "bg-yellow-500"
                     }`}
@@ -678,7 +652,7 @@ const categoryMap: { [key: number]: string } = {
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                        {getStatusText(order.status)}
+                        {order.status}
                       </span>
                     </div>
                   </CardHeader>
@@ -702,21 +676,21 @@ const categoryMap: { [key: number]: string } = {
                     </div>
 
                     <div className="flex gap-2 mt-4">
-                      {order.status === "pending" && !order.notifiedKitchen && (
+                      {order.status === "En attente" && !order.notifiedKitchen && (
                         <Button variant="outline" className="w-full" onClick={() => notifyKitchen(order.id)}>
                           <ChefHat className="h-4 w-4 mr-2" />
                           Notifier la cuisine
                         </Button>
                       )}
 
-                      {order.status === "ready" && !order.notifiedCashier && (
+                      {order.status === "Prête" && !order.notifiedCashier && (
                         <Button variant="outline" className="w-full" onClick={() => notifyCashier(order.id)}>
                           <CreditCard className="h-4 w-4 mr-2" />
                           Notifier le caissier
                         </Button>
                       )}
 
-                      {order.status === "ready" && (
+                      {order.status === "Prête" && (
                         <Button
                           variant="outline"
                           className="w-full"
