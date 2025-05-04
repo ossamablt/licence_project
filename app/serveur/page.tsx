@@ -90,13 +90,16 @@ const categoryMap: { [key: number]: string } = {
 
 
   //get item name 
-   async function getItemNameById(itemId : BigInteger) {
+   async function getItemNameById(itemId: number) {
     try {
       const response = await api.get(`/menuItems/${itemId}`);
-      return response.data.menu_item.name;
+      if (response.data && response.data.menu_item) {
+        return response.data.menu_item.name;
+      }
+      return `Item #${itemId}`;
     } catch (error) {
       console.error("Error fetching item name:", error);
-      return null;
+      return `Item #${itemId}`;
     }
   }
   
@@ -116,80 +119,63 @@ const categoryMap: { [key: number]: string } = {
       }
 
       // Get menu items
-      try {
-        const menuItemsResponse = await api.get("/menuItems")
-        if (menuItemsResponse.data && menuItemsResponse.data["Menu Items"]) {
-          setMenuItems(
-            menuItemsResponse.data["Menu Items"].map((item: any) => ({
-              id: item.id,
-              name: item.name,
-              description: item.description || "",
-              price: item.price,
-              category: categoryMap[item.catégory_id] || "Autre",
-              imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
-            })),
-          )
-        } else {
-          console.warn("Could not load menu items from API, using mock data")
-          toast({
-            title: "Mode démo",
-            description: "Utilisation des données de démonstration pour le menu",
-          })
-        }
-      } catch (error) {
-        console.warn("Error loading menu items:", error)
-      }
-
-      // Get packs with their details
-      try {
-        const packsResponse = await api.get("/packs")
-        if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
-          // First, get all menu items to map pack details
-          const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
-          
-          const loadedPacks = packsResponse.data.packs.map((pack: any) => {
-            // Map pack details to include menu item information
-            const packDetails = pack.pack_details.map((detail: any) => ({
-              item_id: detail.item_id,
-              quantity: detail.quantity,
-              menuItem: menuItemsMap.get(detail.item_id)
-            }))
-
-            return {
-              id: pack.id,
-              name: pack.name,
-              description: pack.description || "",
-              price: pack.price,
-              is_available: pack.is_available,
-              imageUrl: pack.imageUrl || "/placeholder.svg",
-              pack_details: packDetails
-            }
-          })
-
-          setPacks(loadedPacks)
-        }
-      } catch (error) {
-        console.warn("Error loading packs:", error)
+      const menuItemsResponse = await api.get("/menuItems")
+      if (menuItemsResponse.data && menuItemsResponse.data["Menu Items"]) {
+        const menuItemsData = menuItemsResponse.data["Menu Items"].map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description || "",
+          price: item.price,
+          category: categoryMap[item.catégory_id] || "Autre",
+          imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
+        }))
+        setMenuItems(menuItemsData)
+        console.log("Loaded menu items:", menuItemsData) // Debug log
+      } else {
+        console.warn("No menu items found in response:", menuItemsResponse.data)
         toast({
-          title: "Erreur",
-          description: "Impossible de charger les packs",
-          variant: "destructive"
+          title: "Avertissement",
+          description: "Aucun article trouvé dans le menu",
+          variant: "default"
         })
       }
 
+      // Get packs with their details
+      const packsResponse = await api.get("/packs")
+      if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
+        // First, get all menu items to map pack details
+        const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
+        
+        const loadedPacks = packsResponse.data.packs.map((pack: any) => ({
+          id: pack.id,
+          name: pack.name,
+          description: pack.description || "",
+          price: pack.price,
+          is_available: pack.is_available,
+          imageUrl: pack.imageUrl || "/placeholder.svg",
+          pack_details: pack.pack_details.map((detail: any) => ({
+            item_id: detail.item_id,
+            quantity: detail.quantity,
+            menuItem: menuItemsMap.get(detail.item_id)
+          }))
+        }))
+
+        setPacks(loadedPacks)
+      }
+
       // Get orders
-      try {
-        const ordersResponse = await api.get("/orders")
-        if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
-          const ordersWithItems = await Promise.all(
-            ordersResponse.data.orders.map(async (order: any) => {
+      const ordersResponse = await api.get("/orders")
+      if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+        const ordersWithItems = await Promise.all(
+          ordersResponse.data.orders.map(async (order: any) => {
+            try {
               const orderItems = await Promise.all(
                 order.order_details.map(async (detail: any, index: number) => {
                   const itemName = await getItemNameById(detail.item_id)
                   return {
                     id: index + 1,
                     menuItemId: detail.item_id,
-                    name: itemName || `Item #${detail.item_id}`,
+                    name: itemName,
                     price: detail.price,
                     quantity: detail.quantity,
                   }
@@ -206,16 +192,23 @@ const categoryMap: { [key: number]: string } = {
                 notifiedKitchen: order.notified_kitchen || false,
                 notifiedCashier: order.notified_cashier || false,
               }
-            })
-          )
-          setOrders(ordersWithItems)
-        }
-      } catch (error) {
-        console.error("Error loading orders:", error)
-        setOrders([])
+            } catch (error) {
+              console.error("Error processing order:", error)
+              return null
+            }
+          })
+        )
+
+        // Filter out any null orders (failed to process)
+        setOrders(ordersWithItems.filter((order): order is TableOrder => order !== null))
       }
     } catch (error) {
-      console.error("Erreur lors du chargement des données :", error)
+      console.error("Error loading data:", error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les données",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -370,34 +363,101 @@ const categoryMap: { [key: number]: string } = {
     })
   }
 
-  const deleteOrder = async (orderId: number) => {
+  const cancelOrder = async (orderId: number) => {
     try {
-      // Send DELETE request to the API
-      const response = await api.delete(`/orders/${orderId}`);
-      if (response.data && response.data.success) {
-        // Remove the order from the local state
-        setOrders((prevOrders) => prevOrders.filter((order) => order.id !== orderId));
-  
-        toast({
-          title: "Commande supprimée",
-          description: "La commande a été supprimée avec succès.",
-        });
-      } else {
+      // First, get the order to cancel
+      const orderToCancel = orders.find(order => order.id === orderId);
+      if (!orderToCancel) {
         toast({
           title: "Erreur",
-          description: response.data?.message || "Impossible de supprimer la commande.",
+          description: "Commande non trouvée",
           variant: "destructive",
         });
+        return;
+      }
+
+      // Send cancel request to the API
+      const response = await api.put(`/orders/cancel/${orderId}`);
+      
+      if (response.status === 200) {
+        // Update the local state to remove the cancelled order
+        setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        
+        // If the order was associated with a table, update the table status
+        if (orderToCancel.tableNumber) {
+          setTables(prevTables => 
+            prevTables.map(table => 
+              table.number === orderToCancel.tableNumber 
+                ? { ...table, status: "free", orderId: undefined }
+                : table
+            )
+          );
+        }
+
+        toast({
+          title: "Succès",
+          description: "La commande a été annulée avec succès",
+        });
+      } else {
+        throw new Error(response.data?.message || "Erreur lors de l'annulation");
       }
     } catch (error) {
-      console.error("Error deleting order:", error);
+      console.error("Error canceling order:", error);
       toast({
         title: "Erreur",
-        description: "Une erreur s'est produite lors de la suppression de la commande.",
+        description: "Impossible d'annuler la commande",
         variant: "destructive",
       });
     }
   };
+
+  const modifyOrder = async (orderId: number) => {
+    try {
+      const orderToModify = orders.find(order => order.id === orderId);
+      if (!orderToModify) {
+        toast({
+          title: "Erreur",
+          description: "Commande non trouvée",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Find the table associated with this order
+      const tableForOrder = tables.find(table => table.orderId === orderId);
+      if (tableForOrder) {
+        setSelectedTable(tableForOrder);
+      }
+
+      // Set the order to modify as the current order
+      setNewOrder({
+        ...orderToModify,
+        items: orderToModify.items.map(item => ({
+          id: item.id,
+          menuItemId: item.menuItemId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity
+        }))
+      });
+
+      // Open the order dialog
+      setIsNewOrderDialogOpen(true);
+    } catch (error) {
+      console.error("Error preparing order modification:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de modifier la commande",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Update the deleteOrder function to use cancelOrder
+  const deleteOrder = async (orderId: number) => {
+    await cancelOrder(orderId);
+  };
+
   // Calculate total
   const calculateTotal = (items: OrderItem[]): number => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -415,8 +475,8 @@ const categoryMap: { [key: number]: string } = {
         title: "Erreur",
         description: "Informations de commande incomplètes",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     if (newOrder.items.length === 0) {
@@ -424,8 +484,8 @@ const categoryMap: { [key: number]: string } = {
         title: "Erreur",
         description: "Veuillez ajouter des articles à la commande",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
     try {
@@ -442,60 +502,58 @@ const categoryMap: { [key: number]: string } = {
           quantity: item.quantity,
           price: item.price,
         })),
+      };
+
+      let response;
+      // If this is a modification, use PUT instead of POST
+      if (newOrder.id) {
+        response = await api.put(`/orders/${newOrder.id}`, orderPayload);
+      } else {
+        response = await api.post("/orders", orderPayload);
       }
 
-      // Send the order to the API
-      const response = await api.post("/orders", orderPayload)
+      if (response.status === 200 || response.status === 201) {
+        // Update the table status
+        const tableUpdate = await api.put(`/tables/${selectedTable.id}`, {
+          status: "occupied",
+          order_id: newOrder.id || response.data.order_id,
+        });
 
-      if (response.data?.success) {
-        try {
-          // 1. Mettre à jour la table DANS LA BASE DE DONNÉES d'abord
-          const tableUpdate = await api.put(`/tables/${selectedTable.id}`, {
-            status: "occupied",
-            order_id: response.data.order_id,
-          });
-    
-          // 2. Mettre à jour l'état local SEULEMENT si la BDD est mise à jour
-          if (tableUpdate.data.success) {
-            setTables(prev => prev.map(t => 
-              t.id === selectedTable.id ? { 
-                ...t, 
-                status: "occupied",
-                orderId: response.data.order_id 
-              } : t
-            ));
-          }
-    
-          // 3. Fermer la dialog et reset les états
-          setNewOrder(null);
-          setSelectedTable(null);
-          setIsNewOrderDialogOpen(false);
-    
-          // 4. Forcer un rechargement des données
-          await loadData();
-    
-        } catch (err) {
-          console.error("Erreur de mise à jour de la table:", err);
-          toast({
-            title: "Erreur critique",
-            description: "La table n'a pas pu être marquée comme occupée",
-            variant: "destructive"
-          });
-          // Annuler les changements locaux si l'update BDD échoue
+        if (tableUpdate.data.success) {
           setTables(prev => prev.map(t => 
-            t.id === selectedTable.id ? { ...t, status: "free" } : t
+            t.id === selectedTable.id ? { 
+              ...t, 
+              status: "occupied",
+              orderId: newOrder.id || response.data.order_id 
+            } : t
           ));
         }
+
+        // Close the dialog and reset states
+        setNewOrder(null);
+        setSelectedTable(null);
+        setIsNewOrderDialogOpen(false);
+
+        // Refresh the orders list
+        await loadData();
+
+        toast({
+          title: "Succès",
+          description: newOrder.id ? "Commande modifiée avec succès" : "Commande créée avec succès",
+        });
+      } else {
+        throw new Error(response.data?.message || "Erreur lors de l'envoi de la commande");
       }
     } catch (error) {
-      console.error("Erreur lors de l'envoi de la commande :", error)
+      console.error("Error sending order:", error);
       toast({
         title: "Erreur",
         description: "Impossible d'envoyer la commande à la cuisine",
         variant: "destructive",
-      })
+      });
     }
-  }
+  };
+
   // Notify kitchen
   const notifyKitchen = async (orderId: number) => {
     try {
@@ -628,14 +686,7 @@ const categoryMap: { [key: number]: string } = {
 
   // Add pack to order
   const addPackToOrder = (pack: any) => {
-    if (!newOrder) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez d'abord sélectionner une table",
-        variant: "destructive"
-      })
-      return
-    }
+    if (!newOrder) return
 
     // Create order items from pack details
     const packItems = pack.pack_details.map((detail: any) => {
@@ -652,13 +703,10 @@ const categoryMap: { [key: number]: string } = {
     // Add all pack items to the order
     const updatedItems = [...newOrder.items, ...packItems]
 
-    // Calculate the new total including the pack price
-    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-
     setNewOrder({
       ...newOrder,
       items: updatedItems,
-      total: newTotal
+      total: calculateTotal(updatedItems)
     })
 
     toast({
@@ -775,14 +823,23 @@ const categoryMap: { [key: number]: string } = {
                     </div>
                   </div>
               
-                    <div className="flex gap-2 mt-4 bg-red-400 hover:accent-red-700 border-red-700 border rounded-[10px]">
+                    <div className="flex gap-2 mt-4 hover:accent-red-700   rounded-[10px]">
                     {/* Add Delete Button */}
                     <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={() => deleteOrder(order.id)}
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => cancelOrder(order.id)}
                     >
-                      Supprimer
+                      Annuler
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => modifyOrder(order.id)}
+                    >
+                      Modifier
                     </Button>
                     </div>
                 </CardContent>

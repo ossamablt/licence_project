@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import api from "@/lib/api"
+import { toast } from "@/components/ui/use-toast"
 
 type Productcategory = "ingredient" | "boisson" 
 type ProductType = "perishable" | "non_perishable"
@@ -55,18 +56,39 @@ export function StockManagement() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await api.get("/products")
-        const data = Array.isArray(response.data) 
-          ? response.data 
-          : response.data.data || []
-        setProducts(data)
+        const response = await api.get("/products");
+        if (response.data && response.data.products) {
+          // Map the API response to match our Product interface
+          const productsData = response.data.products.map((product: any) => ({
+            id: product.id,
+            name: product.name,
+            unit_price: product.unit_price,
+            current_quantity: product.current_quantity,
+            minimum_quantity: product.minimum_quantity,
+            type: product.type,
+            expiration_date: product.expiration_date,
+            fournisseur: product.fournisseur,
+            category: product.category,
+            last_restock: product.last_restock
+          }));
+          setProducts(productsData);
+        } else {
+          console.error("Invalid products data format:", response.data);
+          setProducts([]);
+        }
       } catch (error) {
-        console.error("Error fetching products:", error)
-        setProducts([])
+        console.error("Error fetching products:", error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les produits",
+          variant: "destructive",
+        });
+        setProducts([]);
       }
-    }
-    fetchProducts()
-  }, [])
+    };
+
+    fetchProducts();
+  }, []);
 
   const filteredProducts = products.filter((product): product is Product => {
     const matchesSearch =

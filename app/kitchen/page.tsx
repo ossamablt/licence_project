@@ -185,9 +185,7 @@ export default function KitchenInterface() {
       const { data } = await api.patch(`/orders/${orderId}`, payload);
       console.log("Full API Response:", data); // Debug log
 
-      if (data.status !== 200) {
-        throw new Error("Failed to update order status");
-      }
+      
 
       // Refresh the orders list to get the latest data
       await getOrders();

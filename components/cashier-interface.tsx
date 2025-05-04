@@ -48,6 +48,7 @@ import {
   type Order,
   type Table as TableType,
   type OrderItem,
+ 
 } from "@/lib/sharedDataService"
 import api from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
@@ -79,15 +80,6 @@ interface PackDetail {
   menuItem?: MenuItem
 }
 
-interface MenuItem {
-  id: number
-  name: string
-  description?: string
-  price: number
-  category: string
-  imageUrl?: string
-}
-
 interface Pack {
   id: number
   name: string
@@ -107,6 +99,16 @@ const categoryMap: { [key: number]: string } = {
   6: "Desserts",
   7: "Boissons",
  
+}
+
+interface MenuItem {
+  id: number
+  name: string
+  description: string
+  price: number
+  catégory_id: number
+  isAvailable: boolean
+  imageUrl: string
 }
 
 export default function CashierInterface() {
@@ -160,6 +162,7 @@ export default function CashierInterface() {
     num_table: 1,
     capacity: 2,
   })
+  const [searchTerm, setSearchTerm] = useState<string>("")
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
@@ -282,18 +285,25 @@ export default function CashierInterface() {
       setOrders(cashierOrders)
 
       // Get menu items
-      const menuItemsResponse = await api.get("/menuItems")
-      if (menuItemsResponse.data && menuItemsResponse.data["Menu Items"]) {
-        setMenuItems(
-          menuItemsResponse.data["Menu Items"].map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            description: item.description || "",
-            price: item.price,
-            category: categoryMap[item.catégory_id] || "Autre",
-            imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
-          })),
-        )
+      try {
+        const response = await api.get("/menuItems")
+        if (response.data && response.data["Menu Items"]) {
+          setMenuItems(
+            response.data["Menu Items"].map((item: any) => ({
+              ...item,
+              imageUrl: item.imageUrl || "/placeholder.svg",
+            })),
+          )
+        } else {
+          throw new Error("Invalid menu items response format")
+        }
+      } catch (error) {
+        console.error("Error loading menu items:", error)
+        toast({ 
+          title: "Erreur", 
+          description: "Échec du chargement des plats", 
+          variant: "destructive" 
+        })
       }
 
       // Get packs with their details
@@ -697,9 +707,13 @@ export default function CashierInterface() {
     }
   }
 
-  // Filtrer les articles du menu par catégorie
-  const filteredMenuItems =
-    selectedCategory === "all" ? menuItems : menuItems.filter((item) => item.category === selectedCategory)
+  // Update the filteredMenuItems to match the menu management implementation
+  const filteredMenuItems = menuItems.filter((item) => {
+    const categoryName = categoryMap[item.catégory_id] || ""
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = selectedCategory === "all" || categoryName === selectedCategory
+    return matchesSearch && matchesCategory
+  })
 
   const formatLocalDate = (date: Date): string => {
     const year = date.getFullYear()
@@ -891,13 +905,13 @@ export default function CashierInterface() {
             <div className="mb-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold">Menu</h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 ">
                   <Select 
                     value={newOrder.type}
                     onValueChange={(value: "sur place" | "à emporter" | "livraison") =>
                       setNewOrder({ ...newOrder, type: value })
                     }
-                  >
+                       >
                     <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Type de commande" />
                     </SelectTrigger>
@@ -953,7 +967,7 @@ export default function CashierInterface() {
                 >
                   Tous
                 </Button>
-                {Array.from(new Set(menuItems.map((item) => item.category))).map((category) => (
+                {Array.from(new Set(menuItems.map((item) => categoryMap[item.catégory_id]))).filter(Boolean).map((category) => (
                   <Button
                     key={category}
                     variant={selectedCategory === category ? "default" : "outline"}
@@ -967,7 +981,6 @@ export default function CashierInterface() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {/* Menu Items */}
               {filteredMenuItems.map((item) => (
                 <Card
                   key={item.id}
@@ -990,36 +1003,6 @@ export default function CashierInterface() {
                   </CardContent>
                 </Card>
               ))}
-
-              {/* Packs */}
-              {packs
-                .filter((pack) => pack.is_available)
-                .map((pack) => (
-                  <Card
-                    key={pack.id}
-                    className="cursor-pointer hover:border-orange-300 transition-colors"
-                    onClick={() => addPackToOrder(pack)}
-                  >
-                    <div className="relative h-44 w-full">
-                      <Image
-                        src={pack.imageUrl || "/placeholder.svg?height=128&width=200"}
-                        alt={pack.name}
-                        fill
-                        className="object-cover rounded-t-lg"
-                      />
-                    </div>
-                    <CardHeader className="p-3 pb-0">
-                      <CardTitle className="text-sm">{pack.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-1">
-                      <p className="text-sm text-neutral-500 mb-1">{pack.description}</p>
-                      <div className="flex justify-between items-center">
-                        <p className="text-lg font-bold text-orange-600">{formatPrice(pack.price)}</p>
-                        <Badge className="bg-orange-500">{pack.pack_details.length} articles</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
             </div>
           </div>
 
