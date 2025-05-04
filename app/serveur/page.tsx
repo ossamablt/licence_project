@@ -86,6 +86,15 @@ const categoryMap: { [key: number]: string } = {
     loadData()
     console.log("Loading data...")
     
+    // Set up polling for real-time updates
+    const pollInterval = setInterval(() => {
+      loadData()
+    }, 5000) // Poll every 5 seconds
+
+    // Cleanup interval on component unmount
+    return () => {
+      clearInterval(pollInterval)
+    }
   }, [router])
 
 
@@ -107,6 +116,7 @@ const categoryMap: { [key: number]: string } = {
   const loadData = async () => {
     setLoading(true)
     try {
+      // Get tables
       const tablesResponse = await api.get("/tables")
       if (tablesResponse.data?.tables) {
         setTables(tablesResponse.data.tables.map((table: any) => ({
@@ -130,40 +140,9 @@ const categoryMap: { [key: number]: string } = {
           imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
         }))
         setMenuItems(menuItemsData)
-        console.log("Loaded menu items:", menuItemsData) // Debug log
-      } else {
-        console.warn("No menu items found in response:", menuItemsResponse.data)
-        toast({
-          title: "Avertissement",
-          description: "Aucun article trouvé dans le menu",
-          variant: "default"
-        })
       }
 
-      // Get packs with their details
-      const packsResponse = await api.get("/packs")
-      if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
-        // First, get all menu items to map pack details
-        const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
-        
-        const loadedPacks = packsResponse.data.packs.map((pack: any) => ({
-          id: pack.id,
-          name: pack.name,
-          description: pack.description || "",
-          price: pack.price,
-          is_available: pack.is_available,
-          imageUrl: pack.imageUrl || "/placeholder.svg",
-          pack_details: pack.pack_details.map((detail: any) => ({
-            item_id: detail.item_id,
-            quantity: detail.quantity,
-            menuItem: menuItemsMap.get(detail.item_id)
-          }))
-        }))
-
-        setPacks(loadedPacks)
-      }
-
-      // Get orders
+      // Get orders with real-time status
       const ordersResponse = await api.get("/orders")
       if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
         const ordersWithItems = await Promise.all(
@@ -200,7 +179,20 @@ const categoryMap: { [key: number]: string } = {
         )
 
         // Filter out any null orders (failed to process)
-        setOrders(ordersWithItems.filter((order): order is TableOrder => order !== null))
+        const validOrders = ordersWithItems.filter((order): order is TableOrder => order !== null)
+        setOrders(validOrders)
+
+        // Update table statuses based on orders
+        setTables(prevTables => 
+          prevTables.map(table => {
+            const tableOrder = validOrders.find(order => order.tableNumber === table.number)
+            return {
+              ...table,
+              status: tableOrder ? "occupied" : "free",
+              orderId: tableOrder?.id
+            }
+          })
+        )
       }
     } catch (error) {
       console.error("Error loading data:", error)
@@ -223,99 +215,17 @@ const categoryMap: { [key: number]: string } = {
   const selectTableForOrder = async (table: Table) => {
     setSelectedTable(table)
 
-    // If table has an existing order, load it
-    if (table.orderId) {
-      try {
-        const orderResponse = await api.get(`/orders/${table.orderId}`);
-        if (orderResponse.data?.order) {
-          const order = orderResponse.data.order;
-          const orderItems = order.order_details.map((detail: any, index: number) => {
-            // 1. Vérification des clés alternatives de l'API
-            const itemId = detail.item_id || detail.menu_item_id;
-            
-            // 2. Recherche de l'article dans le menu
-            const menuItem = menuItems.find((item) => item.id == itemId); // == pour gérer les string/numbers
-            
-            // 3. Gestion des données manquantes
-            const itemName = menuItem?.name || `Article #${itemId}`;
-            const price = Number(detail.price) || 0;
-            const quantity = Math.max(Number(detail.quantity) || 1);
-    
-            // 4. Validation des données
-            if (!itemId) {
-              console.error('ID d\'article manquant dans le détail de commande:', detail);
-              return null;
-            }
-            // 5. Retourner l'objet formaté
-            return {
-              id: index + 1,
-              menuItemId: itemId,
-              name: itemName,
-              price: price,
-              quantity: quantity,
-            };
-          }).filter(Boolean); // Filtrer les entrées invalides
-    
-          // 6. Calcul du total sécurisé
-          const total = orderItems.reduce((sum: number, item: orderItems) => sum + (item.price * item.quantity), 0);
-    
-         
-      
-
-          setNewOrder({
-            id: order.id,
-            tableNumber: table.number,
-            user_id: order.user_id,
-            type: order.type,
-            time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-            status: order.status,
-            items: orderItems,
-            total: order.total_price,
-          
-          })
-        } else {
-          // Create new order if no order found
-          setNewOrder({
-            id: Math.floor(Math.random() * 10000),
-            tableNumber: table.number,
-            time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-            status: "En attente",
-            items: [],
-            type: "A place",
-            user_id: 1,
-            total: 0,
-       
-          })
-        }
-      } catch (error) {
-        console.error("Error fetching order:", error)
-        // Create new order if error
-        setNewOrder({
-          id: Math.floor(Math.random() * 10000),
-          tableNumber: table.number,
-          user_id: Number(localStorage.getItem("userId")) || 1,
-          type: "A place",
-          time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-          status: "En attente",
-          items: [],
-          total: 0,
-          
-        })
-      }
-    } else {
-      // Create new order for new table
-      setNewOrder({
-        id: Math.floor(Math.random() * 10000),
-        tableNumber: table.number,
-        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-        status: "En attente",
-        items: [],
-        type: "A place",
-        user_id: Number(localStorage.getItem("userId")) || 1,
-        total: 0,
-    
-      })
-    }
+    // Create new order for the selected table
+    setNewOrder({
+      id: Math.floor(Math.random() * 10000),
+      tableNumber: table.number,
+      user_id: Number(localStorage.getItem("userId")) || 1,
+      type: "A place",
+      time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      status: "En attente",
+      items: [],
+      total: 0,
+    })
 
     setIsTableSelectionOpen(false)
     setIsNewOrderDialogOpen(true)

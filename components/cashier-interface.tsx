@@ -166,55 +166,85 @@ export default function CashierInterface() {
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
-  // Chargement des données au montage du composant et configuration du polling
-  useEffect(() => {
-    loadData();
-    fetchTodayReservations();
-  
-    const intervalId = setInterval(() => {
-      loadData();
-    }, 5000);
-  
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, []);
-
-  // Récupérer les réservations du jour
+  // Fetch today's reservations
   const fetchTodayReservations = async () => {
     try {
-      const formattedDate = new Date().toISOString().split("T")[0]
-      console.log("Fetching reservations for:", formattedDate)
-
+      const today = new Date()
+      const formattedDate = today.toISOString().split("T")[0]
       const response = await api.get(`/reservation?date=${formattedDate}`)
-
-      console.log("Response:", response.data.reservations) // Log actual array
-
-      setTodayReservations(response.data.reservations) // ✅ Correct access
+      if (response.data && response.data.reservations) {
+        setTodayReservations(response.data.reservations)
+      } else {
+        setTodayReservations([])
+      }
     } catch (error) {
       console.error("Échec de récupération des réservations du jour:", error)
       toast({
-        title: "Mode démo",
-        description: "Utilisation des données de démonstration pour les réservations",
+        title: "Erreur",
+        description: "Impossible de charger les réservations du jour",
+        variant: "destructive",
       })
+      setTodayReservations([])
     }
   }
 
+  // Update the useEffect for loading initial data
+  useEffect(() => {
+    loadData()
+    const today = new Date()
+    setDate(today) // Set initial date to today
+    fetchTodayReservations()
+    fetchReservationsbyDate(today) // Load today's reservations for planning
+  
+    const intervalId = setInterval(() => {
+      loadData()
+      fetchTodayReservations()
+      if (date && date.toDateString() === new Date().toDateString()) {
+        fetchReservationsbyDate(date)
+      }
+    }, 5000)
+  
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [])
+
+  // Update the fetchReservationsbyDate function
   const fetchReservationsbyDate = async (date: Date) => {
     try {
       const formattedDate = date.toISOString().split("T")[0]
       console.log("Fetching reservations for:", formattedDate)
 
       const response = await api.get(`/reservation?date=${formattedDate}`)
+      console.log("Response:", response.data.reservations)
 
-      console.log("Response:", response.data.reservations) // Log actual array
-
-      setReservationsbyDate(response.data.reservations) // ✅ Correct access
+      if (response.data && response.data.reservations) {
+        setReservationsbyDate(response.data.reservations)
+        
+        // If the date is today, also update todayReservations
+        if (date.toDateString() === new Date().toDateString()) {
+          setTodayReservations(response.data.reservations)
+        }
+      } else {
+        setReservationsbyDate([])
+      }
     } catch (error) {
-      console.error("Échec de récupération des réservations du jour:", error)
-      setTodayReservations(undefined)
+      console.error("Échec de récupération des réservations:", error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les réservations",
+        variant: "destructive",
+      })
+      setReservationsbyDate([])
     }
   }
+
+  // Update the useEffect for date changes
+  useEffect(() => {
+    if (date && activeTab === "planning") {
+      fetchReservationsbyDate(date)
+    }
+  }, [date, activeTab])
 
   // fetch tables
   const fetchTables = async () => {
@@ -273,16 +303,36 @@ export default function CashierInterface() {
   const loadData = async () => {
     setLoading(true)
     try {
-      // Get cashier orders
-      const cashierOrders = getCashierOrders()
-      if (orders.length > 0 && cashierOrders.length > orders.length) {
-        setNewOrderNotification(true)
-        toast({
-          title: "Nouvelle commande à encaisser",
-          description: "Une nouvelle commande est prête pour paiement",
+      // Get orders from API
+      const ordersResponse = await api.get("/orders")
+      if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+        const processedOrders = ordersResponse.data.orders.map((order: any) => {
+          const orderItems = order.order_details.map((detail: any, index: number) => {
+            const menuItem = menuItems.find((item) => item.id === detail.item_id)
+            return {
+              id: index + 1,
+              menuItemId: detail.item_id,
+              name: menuItem ? menuItem.name : `Item #${detail.item_id}`,
+              price: detail.price,
+              quantity: detail.quantity,
+            }
+          })
+
+          return {
+            id: order.id,
+            tableId: order.table_id,
+            tableNumber: order.table_id,
+            type: order.type || "sur place",
+            status: order.status,
+            items: orderItems,
+            total: orderItems.reduce((sum: number, item: { price: number; quantity: number }) => sum + (item.price * item.quantity), 0),
+            createdAt: order.date,
+            notifiedKitchen: order.notified_kitchen || false,
+            notifiedCashier: order.notified_cashier || false,
+          }
         })
+        setOrders(processedOrders)
       }
-      setOrders(cashierOrders)
 
       // Get menu items
       try {
@@ -309,11 +359,9 @@ export default function CashierInterface() {
       // Get packs with their details
       const packsResponse = await api.get("/packs")
       if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
-        // First, get all menu items to map pack details
         const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
         
         const loadedPacks = packsResponse.data.packs.map((pack: any) => {
-          // Map pack details to include menu item information
           const packDetails = pack.pack_details.map((detail: any) => ({
             item_id: detail.item_id,
             quantity: detail.quantity,
@@ -332,12 +380,6 @@ export default function CashierInterface() {
         })
 
         setPacks(loadedPacks)
-      }
-
-      // Get orders from API
-      const ordersResponse = await api.get("/orders")
-      if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
-        setOrders(ordersResponse.data.orders)
       }
     } catch (error) {
       console.error("Error loading data:", error)
@@ -570,71 +612,40 @@ export default function CashierInterface() {
       return
     }
 
-    // Check for table conflicts
-    if (selectedTable) {
-      const existingReservations = reservationsbyDate || []
-      const tableConflict = existingReservations.find(
-        (r) =>
-          r.tables_id === selectedTable.id &&
-          r.hour === reservationTime &&
-          (!selectedReservation || r.id !== selectedReservation.id),
-      )
-
-      if (tableConflict) {
-        toast({
-          title: "Conflit de réservation",
-          description: `La table ${selectedTable.number} est déjà réservée à cette heure`,
-          variant: "destructive",
-        })
-        return
-      }
-    }
-
     try {
-      if (isEditingReservation && selectedReservation) {
-        // Mettre à jour une réservation existante
-        const updatedReservation = {
-          client_name: reservationName,
-          number_of_persones: Number.parseInt(reservationGuests),
-          date: date.toISOString().split("T")[0],
-          hour: reservationTime.split(":").slice(0, 2).join(":"),
-          client_phone: reservationPhone,
-          note: reservationNote,
-          tables_id: selectedTable?.id || null,
-          duration: 2, // Durée par défaut
-        }
-        console.log(updatedReservation)
+      const reservationData = {
+        client_name: reservationName,
+        number_of_persones: Number.parseInt(reservationGuests),
+        date: date.toISOString().split("T")[0],
+        hour: reservationTime,
+        client_phone: reservationPhone,
+        note: reservationNote,
+        tables_id: selectedTable?.id || null,
+        duration: 2,
+      }
 
-        await api.put(`/reservation/${selectedReservation.id}`, updatedReservation)
+      if (isEditingReservation && selectedReservation) {
+        await api.put(`/reservation/${selectedReservation.id}`, reservationData)
         toast({
           title: "Succès",
           description: "Réservation mise à jour avec succès",
         })
       } else {
-        // Ajouter une nouvelle réservation
-        const newReservation = {
-          client_name: reservationName,
-          number_of_persones: Number.parseInt(reservationGuests),
-          date: date.toISOString().split("T")[0],
-          hour: reservationTime,
-          client_phone: reservationPhone,
-          note: reservationNote,
-          tables_id: selectedTable?.id || null,
-          duration: 2, // Durée par défaut
-        }
-        console.log(newReservation)
-        await api.post("/reservation", newReservation)
+        await api.post("/reservation", reservationData)
         toast({
           title: "Succès",
           description: "Réservation ajoutée avec succès",
         })
-
-        // Rafraîchir les réservations du jour si la nouvelle réservation est pour aujourd'hui
-        if (date.toDateString() === new Date().toDateString()) {
-          fetchTodayReservations()
-          fetchReservationsbyDate(date)
-        }
       }
+
+      // Refresh both today's reservations and the selected date's reservations
+      fetchTodayReservations()
+      if (date) {
+        fetchReservationsbyDate(date)
+      }
+
+      resetReservationForm()
+      setReservationDialogOpen(false)
     } catch (error) {
       console.error("Erreur lors de l'opération sur la réservation:", error)
       toast({
@@ -643,9 +654,6 @@ export default function CashierInterface() {
         variant: "destructive",
       })
     }
-
-    resetReservationForm()
-    setReservationDialogOpen(false)
   }
 
   // Modifier une réservation
@@ -720,141 +728,6 @@ export default function CashierInterface() {
     const month = String(date.getMonth() + 1).padStart(2, "0")
     const day = String(date.getDate()).padStart(2, "0")
     return `${year}-${month}-${day}`
-  }
-
-  // Charger les réservations pour la date sélectionnée
-  useEffect(() => {
-    if (date && activeTab === "planning") {
-      const loadDateReservations = async () => {
-        const formattedDate = formatLocalDate(date) // Format YYYY-MM-DD
-        console.log("Fetching reservations for:", formattedDate)
-        try {
-          const response = await api.get(`/reservation?date=${formattedDate}`)
-          const reservations = response.data.reservations
-
-          console.log("Response:", reservations) // Log actual array
-
-          setReservationsbyDate(reservations) // Keep updating state for elsewhere if needed
-
-          const dateReservationsElement = document.getElementById("date-reservations")
-
-          if (dateReservationsElement) {
-            if ((reservations ?? []).length > 0) {
-              dateReservationsElement.innerHTML = reservations
-                .map(
-                  (res: Reservation) => `
-                    <div class="p-2 border rounded-md flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <span className="mr-1">⏱</span>
-                          <span>${res.hour}</span>
-                          ${
-                            res.tables_id
-                              ? `
-                            <span className="mx-2">•</span>
-                            <span>Table ${res.tables_id}</span>
-                          `
-                              : ""
-                          }
-                        </div>
-                      </div>
-                      <button class="px-2 py-1 text-sm border rounded hover:bg-gray-100" 
-                        onclick="document.dispatchEvent(new CustomEvent('editReservation', {detail: ${res.id}}))">
-                        Modifier
-                      </button>
-                    </div>
-                  `,
-                )
-                .join("")
-            } else {
-              dateReservationsElement.innerHTML =
-                '<p class="text-gray-500 text-center py-2">Aucune réservation pour cette date</p>'
-            }
-          }
-        } catch (error) {
-          console.error("Échec de récupération des réservations:", error)
-        }
-      }
-
-      loadDateReservations()
-    }
-  }, [date, activeTab])
-
-  // Écouteur d'événements pour modifier la réservation à partir du contenu dynamique
-  useEffect(() => {
-    const handleEditReservation = (e: CustomEvent) => {
-      const reservationId = e.detail
-      const reservation = todayReservations?.find((r) => r.id === reservationId)
-      if (reservation) {
-        editReservation(reservation)
-      }
-    }
-
-    document.addEventListener("editReservation", handleEditReservation as EventListener)
-    return () => {
-      document.removeEventListener("editReservation", handleEditReservation as EventListener)
-    }
-  }, [todayReservations])
-
-  // Set table form data when a table is selected for editing reservations
-  useEffect(() => {
-    if (selectedTable) {
-      const table = tables.find((t) => t.id === selectedTable.id)
-      if (table) {
-        setTableFormData({
-          id: table.id,
-          num_table: table.num_table,
-          capacity: table.capacity,
-        })
-      }
-    } else {
-      // Reset form for new table
-      setTableFormData({
-        num_table: tables.length > 0 ? Math.max(...tables.map((t) => t.num_table)) + 1 : 1,
-        capacity: 2,
-      })
-    }
-  }, [selectedTable, tables])
-
-  // Add pack to order
-  const addPackToOrder = (pack: Pack) => {
-    if (!newOrder) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez d'abord sélectionner une table",
-        variant: "destructive"
-      })
-      return
-    }
-
-    // Create order items from pack details
-    const packItems = pack.pack_details.map((detail) => {
-      const menuItem = detail.menuItem
-      return {
-        id: newOrder.items.length + 1,
-        menuItemId: detail.item_id,
-        name: menuItem ? menuItem.name : `Item #${detail.item_id}`,
-        price: menuItem ? menuItem.price : 0,
-        quantity: detail.quantity
-      }
-    })
-
-    // Add all pack items to the order
-    const updatedItems = [...newOrder.items, ...packItems]
-
-    // Calculate the new total including the pack price
-    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-
-    setNewOrder({
-      ...newOrder,
-      items: updatedItems,
-      total: newTotal
-    })
-
-    toast({
-      title: "Pack ajouté",
-      description: `${pack.name} ajouté à la commande`,
-    })
   }
 
   return (
@@ -1283,7 +1156,12 @@ export default function CashierInterface() {
                       <CalendarComponent
                         mode="single"
                         selected={date}
-                        onSelect={setDate}
+                        onSelect={(newDate) => {
+                          setDate(newDate)
+                          if (newDate) {
+                            fetchReservationsbyDate(newDate)
+                          }
+                        }}
                         className="rounded-md border"
                         locale={fr}
                       />
@@ -1294,9 +1172,46 @@ export default function CashierInterface() {
                         Réservations pour {date ? format(date, "dd MMMM yyyy", { locale: fr }) : "aujourd'hui"}
                       </h4>
                       <div className="space-y-2" id="date-reservations">
-                        <p className="text-gray-500 text-center py-2">
-                          Sélectionnez une date pour voir les réservations
-                        </p>
+                        {reservationsbyDate && reservationsbyDate.length > 0 ? (
+                          reservationsbyDate.map((reservation) => (
+                            <div key={reservation.id} className="p-2 border rounded-md flex justify-between items-center">
+                              <div>
+                                <div className="font-medium">{reservation.client_name}</div>
+                                <div className="flex items-center text-sm text-gray-500 mt-1">
+                                  <span className="mr-1">⏱</span>
+                                  <span>{reservation.hour}</span>
+                                  {reservation.tables_id && (
+                                    <>
+                                      <span className="mx-2">•</span>
+                                      <span>Table {reservation.tables_id}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => editReservation(reservation)}
+                                >
+                                  Modifier
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-500"
+                                  onClick={() => deleteReservation(reservation.id)}
+                                >
+                                  Supprimer
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-gray-500 text-center py-2">
+                            Aucune réservation pour cette date
+                          </p>
+                        )}
                       </div>
                     </div>
                   </CardContent>

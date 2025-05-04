@@ -41,6 +41,7 @@ export function StockManagement() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
+  const [selectedProductForDetails, setSelectedProductForDetails] = useState<Product | null>(null);
 
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: "",
@@ -57,20 +58,41 @@ export function StockManagement() {
     const fetchProducts = async () => {
       try {
         const response = await api.get("/products");
+        console.log("Backend response:", response.data); // Debug the response
+
         if (response.data && response.data.products) {
-          // Map the API response to match our Product interface
-          const productsData = response.data.products.map((product: any) => ({
-            id: product.id,
-            name: product.name,
-            unit_price: product.unit_price,
-            current_quantity: product.current_quantity,
-            minimum_quantity: product.minimum_quantity,
-            type: product.type,
-            expiration_date: product.expiration_date,
-            fournisseur: product.fournisseur,
-            category: product.category,
-            last_restock: product.last_restock
-          }));
+          const productsData = response.data.products.map((product: any) => {
+            // Safely parse unit_price with proper error handling
+            let parsedUnitPrice = 0;
+            try {
+              if (typeof product.unit_price === 'string') {
+                parsedUnitPrice = parseFloat(product.unit_price.replace(',', '.'));
+              } else if (typeof product.unit_price === 'number') {
+                parsedUnitPrice = product.unit_price;
+              }
+              // Ensure it's a valid number
+              if (isNaN(parsedUnitPrice)) {
+                console.warn(`Invalid unit_price for product ${product.id}:`, product.unit_price);
+                parsedUnitPrice = 0;
+              }
+            } catch (error) {
+              console.error(`Error parsing unit_price for product ${product.id}:`, error);
+              parsedUnitPrice = 0;
+            }
+
+            return {
+              id: product.id,
+              name: product.name,
+              unit_price: parsedUnitPrice,
+              current_quantity: product.current_quantity,
+              minimum_quantity: product.minimum_quantity,
+              type: product.type,
+              expiration_date: product.expiration_date,
+              fournisseur: product.fournisseur,
+              category: product.category,
+              last_restock: product.last_restock,
+            };
+          });
           setProducts(productsData);
         } else {
           console.error("Invalid products data format:", response.data);
@@ -140,22 +162,65 @@ export function StockManagement() {
 
   const handleProductSubmit = async () => {
     try {
-      if (isEditMode && selectedProduct) {
-        const response = await api.put(`/products/${selectedProduct.id}`, newProduct)
-        setProducts(prev => prev.map(prod => 
-          prod.id === selectedProduct.id ? response.data : prod
-        ))
-      } else {
-        const response = await api.post("/products", newProduct)
-        setProducts(prev => [...prev, response.data])
+      // Safely parse unit_price before sending to API
+      let parsedUnitPrice = 0;
+      try {
+        if (typeof newProduct.unit_price === 'string') {
+          parsedUnitPrice = parseFloat((newProduct.unit_price as string).replace(',', '.'));
+        } else if (typeof newProduct.unit_price === 'number') {
+          parsedUnitPrice = newProduct.unit_price;
+        }
+        if (isNaN(parsedUnitPrice)) {
+          throw new Error('Invalid unit price');
+        }
+      } catch (error) {
+        console.error("Error parsing unit_price:", error);
+        toast({
+          title: "Erreur",
+          description: "Prix unitaire invalide",
+          variant: "destructive",
+        });
+        return;
       }
-      setAddProductOpen(false)
-      setIsEditMode(false)
-      resetForm()
+
+      const productData = {
+        ...newProduct,
+        unit_price: parsedUnitPrice
+      };
+
+      if (isEditMode && selectedProduct) {
+        const response = await api.put(`/products/${selectedProduct.id}`, productData);
+        if (response.data) {
+          setProducts(prev => prev.map(prod => 
+            prod.id === selectedProduct.id ? response.data : prod
+          ));
+          toast({
+            title: "Succès",
+            description: "Produit modifié avec succès",
+          });
+        }
+      } else {
+        const response = await api.post("/products", productData);
+        if (response.data) {
+          setProducts(prev => [...prev, response.data]);
+          toast({
+            title: "Succès",
+            description: "Produit ajouté avec succès",
+          });
+        }
+      }
+      setAddProductOpen(false);
+      setIsEditMode(false);
+      resetForm();
     } catch (error) {
-      console.error("Error saving product:", error)
+      console.error("Error saving product:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de sauvegarder le produit",
+        variant: "destructive",
+      });
     }
-  }
+  };
 
   const openEditProduct = (product: Product) => {
     setSelectedProduct(product)
@@ -181,11 +246,18 @@ export function StockManagement() {
   }
 
   const formatPrice = (price: number) => {
+    if (isNaN(price)) return "0,00 €";
     return new Intl.NumberFormat("fr-FR", { 
       style: "currency", 
-      currency: "EUR" 
-    }).format(price)
-  }
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(price);
+  };
+
+  const openProductDetails = (product: Product) => {
+    setSelectedProductForDetails(product);
+  };
 
   return (
     <>
@@ -254,8 +326,12 @@ export function StockManagement() {
                       id="unit_price"
                       type="number"
                       step="0.01"
-                      value={newProduct.unit_price}
-                      onChange={(e) => setNewProduct({ ...newProduct, unit_price: Number(e.target.value) })}
+                      min="0"
+                      value={newProduct.unit_price || ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? 0 : Number(e.target.value);
+                        setNewProduct({ ...newProduct, unit_price: value });
+                      }}
                       placeholder="0.00"
                     />
                   </div>
@@ -427,6 +503,7 @@ export function StockManagement() {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                    onClick={() => openProductDetails(product)}
                   >
                     <Info size={16} />
                   </Button>
@@ -454,6 +531,102 @@ export function StockManagement() {
           )}
         </div>
       </div>
+
+      {/* Product Details Dialog */}
+      <Dialog open={!!selectedProductForDetails} onOpenChange={() => setSelectedProductForDetails(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Détails du Produit</DialogTitle>
+          </DialogHeader>
+          {selectedProductForDetails && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Nom du Produit</Label>
+                  <div className="p-2 border rounded-md">{selectedProductForDetails.name}</div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Catégorie</Label>
+                  <div className="p-2 border rounded-md">
+                    {selectedProductForDetails.category === "ingredient" ? "Ingrédient" : "Boisson"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Prix Unitaire</Label>
+                  <div className="p-2 border rounded-md">{formatPrice(selectedProductForDetails.unit_price)}</div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <div className="p-2 border rounded-md">
+                    {selectedProductForDetails.type === "perishable" ? "Périssable" : "Non périssable"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Quantité Actuelle</Label>
+                  <div className="p-2 border rounded-md">{selectedProductForDetails.current_quantity} unités</div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Stock Minimum</Label>
+                  <div className="p-2 border rounded-md">{selectedProductForDetails.minimum_quantity} unités</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Fournisseur</Label>
+                  <div className="p-2 border rounded-md">{selectedProductForDetails.fournisseur}</div>
+                </div>
+                {selectedProductForDetails.expiration_date && (
+                  <div className="space-y-2">
+                    <Label>Date d'Expiration</Label>
+                    <div className="p-2 border rounded-md">
+                      {new Date(selectedProductForDetails.expiration_date).toLocaleDateString('fr-FR')}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedProductForDetails.last_restock && (
+                <div className="space-y-2">
+                  <Label>Dernier Réapprovisionnement</Label>
+                  <div className="p-2 border rounded-md">
+                    {new Date(selectedProductForDetails.last_restock).toLocaleDateString('fr-FR')}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedProductForDetails(null);
+                    openEditProduct(selectedProductForDetails);
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Modifier
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setSelectedProductForDetails(null);
+                    deleteProduct(selectedProductForDetails.id);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Supprimer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
