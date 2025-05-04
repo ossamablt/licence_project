@@ -27,14 +27,12 @@ interface Order {
   id: number
   tableNumber: number
   time: string
-  status: "En attente" | "En préparation" | "Prêt" | "Payée"
+  status: "En attente" | "En préparation" | "Prête" | "Payée"
   items: {
     id: number
     name: string
     quantity: string
-    price: number
   }[]
-  total: number
   notifiedKitchen: boolean
   notifiedCashier: boolean
 }
@@ -51,10 +49,10 @@ export default function KitchenInterface() {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
 
-    // if (!isLoggedIn || userRole !== "kitchen") {
-    //   router.push("/login")
-    //   return
-    // }
+    if (!isLoggedIn || userRole !== "Cuisinier") {
+      router.push("/")
+      return
+    }
 
     // Connect to notification service
     notificationService.connect()
@@ -67,7 +65,6 @@ export default function KitchenInterface() {
           ...data,
           time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
           items: data.items || [],
-          total: data.total || 0,
           notifiedKitchen: true,
           notifiedCashier: false,
         },
@@ -110,48 +107,50 @@ export default function KitchenInterface() {
   const getOrders = async () => {
     try {
       setLoading(true);
+      
+      // First fetch menu items
+      const menuResponse = await api.get("/menuItems");
+      const menuItems = menuResponse.data?.["Menu Items"] || [];
+      
+      // Then fetch orders
       const response = await api.get("/orders");
       
       if (response.status !== 200) {
         throw new Error("Failed to fetch orders");
       }
-  
-      console.log("Full API response:", response.data);
-      
-   
+
       if (!response.data?.orders) {
         throw new Error("Orders data is missing");
       }
-  
+
       if (!Array.isArray(response.data.orders)) {
-        // If it's not an array but exists, wrap it in an array
         response.data.orders = [response.data.orders];
       }
-  
+
       const data: Order[] = response.data.orders.map((o: any) => {
-        // Ensure items exists and is an array
-        const items = Array.isArray(o.items) ? o.items : [];
+        const items = Array.isArray(o.order_details) ? o.order_details : [];
         
         return {
           id: o.id,
           tableNumber: o.table_id,
-          time: o.time || new Date().toLocaleTimeString("fr-FR", { 
+          time: new Date(o.date).toLocaleTimeString("fr-FR", { 
             hour: "2-digit", 
             minute: "2-digit" 
           }),
           status: o.status,
-          items: items.map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            quantity: item.quantity ?? "1",
-            price: item.price,
-          })),
-          total: o.total,
-          notifiedKitchen: o.notifiedKitchen ?? true,
-          notifiedCashier: o.notifiedCashier ?? false,
+          items: items.map((item: any) => {
+            const menuItem = menuItems.find((menu: any) => menu.id === item.item_id);
+            return {
+              id: item.id,
+              name: menuItem?.name || `Item #${item.item_id}`,
+              quantity: item.quantity || "1",
+            };
+          }),
+          notifiedKitchen: o.notified_kitchen || true,
+          notifiedCashier: o.notified_cashier || false,
         };
       });
-  
+
       setOrders(data);
       setSharedOrders(data);
     } catch (error) {
@@ -174,53 +173,101 @@ export default function KitchenInterface() {
   
 
   // Update order status
-  const updateOrderStatus = (orderId: number, newStatus: "En attente" | "En préparation" | "Prêt" | "Payée") => {
-    // Update local state
-    const updatedOrders = orders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order))
+  const updateOrderStatus = async (orderId: number, newStatus: "En attente" | "En préparation" | "Prête" | "Payée") => {
+    try {
+      console.log("Updating order status:", { orderId, newStatus }); // Debug log
 
-    setOrders(updatedOrders)
-    setSharedOrders(updatedOrders)
+      const payload = {
+        status: newStatus
+      };
+      console.log("Sending payload:", payload); // Debug log
 
-    // If order is ready, notify server
-    if (newStatus === "Prêt") {
-      const orderToNotify = orders.find((order) => order.id === orderId)
-      if (orderToNotify) {
-        notificationService.publish("order.updated", { ...orderToNotify, status: newStatus }, "server")
+      const { data } = await api.patch(`/orders/${orderId}`, payload);
+      console.log("Full API Response:", data); // Debug log
+
+      if (data.status !== 200) {
+        throw new Error("Failed to update order status");
+      }
+
+      // Refresh the orders list to get the latest data
+      await getOrders();
+
+      // Show success toast
+      toast({
+        title: "Statut mis à jour",
+        description: `La commande est maintenant ${newStatus.toLowerCase()}`,
+      });
+
+      // Reset notification flag if we're starting to prepare an order
+      if (newStatus === "En préparation") {
+        setNewOrderNotification(false);
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error);
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { message?: string } } };
+        console.error("Error details:", axiosError.response?.data);
+        toast({
+          title: "Erreur",
+          description: axiosError.response?.data?.message || "Impossible de mettre à jour le statut de la commande",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erreur",
+          description: "Impossible de mettre à jour le statut de la commande",
+          variant: "destructive",
+        });
       }
     }
+  };
 
-    // Show success toast
-    toast({
-      title: "Statut mis à jour",
-      description: `La commande est maintenant ${getStatusText(newStatus).toLowerCase()}`,
-    })
-
-    // Reset notification flag if we're starting to prepare an order
-    if (newStatus === "En préparation") {
-      setNewOrderNotification(false)
+  // Add delete order function
+  const deleteOrder = async (orderId: number) => {
+    try {
+      const response = await api.delete(`/orders/${orderId}`);
+      
+      if (response.data?.success) {
+        // Remove the order from local state
+        setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+        
+        toast({
+          title: "Commande supprimée",
+          description: "La commande a été supprimée avec succès",
+        });
+      } else {
+        throw new Error("Failed to delete order");
+      }
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer la commande",
+        variant: "destructive",
+      });
     }
-  }
-
-  // Get status text in French
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case "preparing":
-        return "En préparation"
-      case "ready":
-        return "Prêt"
-      case "pending":
-        return "En attente"
-      case "completed":
-        return "Terminé"
-      default:
-        return status
-    }
-  }
+  };
 
   // Filter orders by status
-  const pendingOrders = orders.filter((order) => order.status === "En attente" && order.notifiedKitchen)
-  const preparingOrders = orders.filter((order) => order.status === "En préparation" && order.notifiedKitchen)
-  const readyOrders = orders.filter((order) => order.status === "Prêt" && order.notifiedKitchen)
+  const pendingOrders = orders.filter((order) => order.status === "En attente" && order.notifiedKitchen);
+  const preparingOrders = orders.filter((order) => order.status === "En préparation" && order.notifiedKitchen);
+  const readyOrders = orders.filter((order) => order.status === "Prête" && order.notifiedKitchen);
+
+  // Get status color
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "En préparation":
+        return "bg-blue-100 text-blue-800";
+      case "Prête":
+        return "bg-green-100 text-green-800";
+      case "En attente":
+        return "bg-yellow-100 text-yellow-800";
+      case "Payée":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
 
   if (loading) {
     return (
@@ -248,7 +295,7 @@ export default function KitchenInterface() {
                
               </Avatar>
               </div>
-              <span className="font-medium">Cuisine</span>
+              <span className="font-medium">{localStorage.getItem("username")}</span>
               
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
@@ -277,23 +324,23 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
-
+                        <CardTitle>Table {order.tableNumber}</CardTitle>
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
                         </div>
                       </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                           
-                          </div>
+                        <div key={index} className="flex flex-col">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-neutral-500 mt-1">Quantité: {item.quantity}</p>
                         </div>
                       ))}
                     </div>
@@ -332,27 +379,23 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
-
+                        <CardTitle>Table {order.tableNumber}</CardTitle>
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
                         </div>
                       </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-neutral-500">
-                              {Object.entries(item.id)
-                                .map(([key, value]) => `${value}`)
-                                .join(" • ")}
-                            </p>
-                          </div>
+                        <div key={index} className="flex flex-col">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-neutral-500 mt-1">Quantité: {item.quantity}</p>
                         </div>
                       ))}
                     </div>
@@ -360,7 +403,7 @@ export default function KitchenInterface() {
                     <div className="mt-4">
                       <Button
                         className="w-full bg-green-500 hover:bg-green-600"
-                        onClick={() => updateOrderStatus(order.id, "Prêt")}
+                        onClick={() => updateOrderStatus(order.id, "Prête")}
                       >
                         <CheckCircle className="h-4 w-4 mr-2" />
                         Marquer comme prêt
@@ -391,23 +434,23 @@ export default function KitchenInterface() {
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
-                      <CardTitle>Commande #{order.id} - Table {order.tableNumber}</CardTitle>
-
+                        <CardTitle>Table {order.tableNumber}</CardTitle>
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
                         </div>
                       </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between items-start">
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            
-                          </div>
+                        <div key={index} className="flex flex-col">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-neutral-500 mt-1">Quantité: {item.quantity}</p>
                         </div>
                       ))}
                     </div>
@@ -416,9 +459,14 @@ export default function KitchenInterface() {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() => updateOrderStatus(order.id, "Prêt")}
+                        onClick={async () => {
+                          // First mark as completed
+                          await updateOrderStatus(order.id, "Payée");
+                          // Then delete the order
+                          await deleteOrder(order.id);
+                        }}
                       >
-                        Marquer comme terminé
+                        Marquer comme terminé et supprimer
                       </Button>
                     </div>
                   </CardContent>

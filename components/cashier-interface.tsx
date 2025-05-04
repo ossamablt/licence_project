@@ -18,6 +18,7 @@ import {
   CreditCard,
   DollarSign,
   Printer,
+  Package,
 } from "lucide-react"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -47,9 +48,9 @@ import {
   type Order,
   type Table as TableType,
   type OrderItem,
-  type MenuItem,
 } from "@/lib/sharedDataService"
 import api from "@/lib/api"
+import { Badge } from "@/components/ui/badge"
 
 interface TableInterface {
   id: number
@@ -72,6 +73,30 @@ interface Reservation {
   table: TableInterface
 }
 
+interface PackDetail {
+  item_id: number
+  quantity: number
+  menuItem?: MenuItem
+}
+
+interface MenuItem {
+  id: number
+  name: string
+  description?: string
+  price: number
+  category: string
+  imageUrl?: string
+}
+
+interface Pack {
+  id: number
+  name: string
+  description: string
+  price: number
+  is_available: boolean
+  imageUrl?: string
+  pack_details: PackDetail[]
+}
 
 const categoryMap: { [key: number]: string } = {
   1: "Burgers",
@@ -86,7 +111,8 @@ const categoryMap: { [key: number]: string } = {
 
 export default function CashierInterface() {
   // Gestion des états
-  const [activeTab, setActiveTab] = useState("commandes")
+  const [activeTab, setActiveTab] = useState<"commandes" | "tables" | "planning" | "menu" | "packs">("commandes")
+  const [loading, setLoading] = useState(false)
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null)
   const [newOrder, setNewOrder] = useState<{
     type: "sur place" | "à emporter" | "livraison"
@@ -117,6 +143,7 @@ export default function CashierInterface() {
   const [tables, setTables] = useState<TableInterface[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [packs, setPacks] = useState<Pack[]>([])
   const [newOrderNotification, setNewOrderNotification] = useState(false)
   const [customerPhone, setCustomerPhone] = useState<string>("")
   const [customerName, setCustomerName] = useState<string>("")
@@ -140,31 +167,6 @@ export default function CashierInterface() {
   useEffect(() => {
     loadData();
     fetchTodayReservations();
-  
-    // Fetch menu items from API
-    const fetchMenuItems = async () => {
-      try {
-        const response = await api.get("/menuItems");
-        const transformedItems = response.data["Menu Items"].map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          category: categoryMap[item.catégory_id] || "Autre",
-          image: item.imageUrl || "/placeholder.svg",
-          is_available: item.is_available
-        }));
-        setMenuItems(transformedItems);
-      } catch (error) {
-        console.error("Failed to fetch menu items:", error);
-        toast({
-          title: "Erreur",
-          description: "Échec du chargement du menu",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchMenuItems();
   
     const intervalId = setInterval(() => {
       loadData();
@@ -265,18 +267,78 @@ export default function CashierInterface() {
 
 
   // Charger les données depuis le service partagé
-  const loadData = () => {
-    const cashierOrders = getCashierOrders()
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      // Get cashier orders
+      const cashierOrders = getCashierOrders()
+      if (orders.length > 0 && cashierOrders.length > orders.length) {
+        setNewOrderNotification(true)
+        toast({
+          title: "Nouvelle commande à encaisser",
+          description: "Une nouvelle commande est prête pour paiement",
+        })
+      }
+      setOrders(cashierOrders)
 
-    if (orders.length > 0 && cashierOrders.length > orders.length) {
-      setNewOrderNotification(true)
+      // Get menu items
+      const menuItemsResponse = await api.get("/menuItems")
+      if (menuItemsResponse.data && menuItemsResponse.data["Menu Items"]) {
+        setMenuItems(
+          menuItemsResponse.data["Menu Items"].map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            description: item.description || "",
+            price: item.price,
+            category: categoryMap[item.catégory_id] || "Autre",
+            imageUrl: item.imageUrl || "/placeholder.svg?height=100&width=100",
+          })),
+        )
+      }
+
+      // Get packs with their details
+      const packsResponse = await api.get("/packs")
+      if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
+        // First, get all menu items to map pack details
+        const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
+        
+        const loadedPacks = packsResponse.data.packs.map((pack: any) => {
+          // Map pack details to include menu item information
+          const packDetails = pack.pack_details.map((detail: any) => ({
+            item_id: detail.item_id,
+            quantity: detail.quantity,
+            menuItem: menuItemsMap.get(detail.item_id)
+          }))
+
+          return {
+            id: pack.id,
+            name: pack.name,
+            description: pack.description || "",
+            price: pack.price,
+            is_available: pack.is_available,
+            imageUrl: pack.imageUrl || "/placeholder.svg",
+            pack_details: packDetails
+          }
+        })
+
+        setPacks(loadedPacks)
+      }
+
+      // Get orders from API
+      const ordersResponse = await api.get("/orders")
+      if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+        setOrders(ordersResponse.data.orders)
+      }
+    } catch (error) {
+      console.error("Error loading data:", error)
       toast({
-        title: "Nouvelle commande à encaisser",
-        description: "Une nouvelle commande est prête pour paiement",
+        title: "Erreur",
+        description: "Impossible de charger les données",
+        variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
-
-    setOrders(cashierOrders)
   }
 
   // Ajouter un article à la commande en cours
@@ -669,13 +731,13 @@ export default function CashierInterface() {
                   (res: Reservation) => `
                     <div class="p-2 border rounded-md flex justify-between items-center">
                       <div>
-                        <div class="flex items-center text-sm text-gray-500">
-                          <span class="mr-1">⏱</span>
+                        <div className="flex items-center text-sm text-gray-500">
+                          <span className="mr-1">⏱</span>
                           <span>${res.hour}</span>
                           ${
                             res.tables_id
                               ? `
-                            <span class="mx-2">•</span>
+                            <span className="mx-2">•</span>
                             <span>Table ${res.tables_id}</span>
                           `
                               : ""
@@ -740,16 +802,57 @@ export default function CashierInterface() {
     }
   }, [selectedTable, tables])
 
+  // Add pack to order
+  const addPackToOrder = (pack: Pack) => {
+    if (!newOrder) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez d'abord sélectionner une table",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Create order items from pack details
+    const packItems = pack.pack_details.map((detail) => {
+      const menuItem = detail.menuItem
+      return {
+        id: newOrder.items.length + 1,
+        menuItemId: detail.item_id,
+        name: menuItem ? menuItem.name : `Item #${detail.item_id}`,
+        price: menuItem ? menuItem.price : 0,
+        quantity: detail.quantity
+      }
+    })
+
+    // Add all pack items to the order
+    const updatedItems = [...newOrder.items, ...packItems]
+
+    // Calculate the new total including the pack price
+    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+    setNewOrder({
+      ...newOrder,
+      items: updatedItems,
+      total: newTotal
+    })
+
+    toast({
+      title: "Pack ajouté",
+      description: `${pack.name} ajouté à la commande`,
+    })
+  }
+
   return (
     <div className="h-full flex flex-col">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "commandes" | "tables" | "planning" | "menu" | "packs")} className="flex-1 flex flex-col">
         <TabsList className="grid grid-cols-3 w-full bg-orange-50">
           <TabsTrigger
             value="commandes"
             className={`flex items-center gap-2 border-b-2 ${
               activeTab === "commandes"
-          ? "border-orange-500 text-orange-700"
-          : "border-transparent hover:border-orange-400"
+                ? "border-orange-500 text-orange-700"
+                : "border-transparent hover:border-orange-400"
             }`}
           >
             <ShoppingBag className="h-4 w-4" />
@@ -762,8 +865,8 @@ export default function CashierInterface() {
             value="tables"
             className={`flex items-center gap-2 border-b-2 ${
               activeTab === "tables"
-          ? "border-orange-500 text-orange-700"
-          : "border-transparent hover:border-orange-400"
+                ? "border-orange-500 text-orange-700"
+                : "border-transparent hover:border-orange-400"
             }`}
           >
             <Utensils className="h-4 w-4" />
@@ -773,8 +876,8 @@ export default function CashierInterface() {
             value="planning"
             className={`flex items-center gap-2 border-b-2 ${
               activeTab === "planning"
-          ? "border-orange-500 text-orange-700"
-          : "border-transparent hover:border-orange-400"
+                ? "border-orange-500 text-orange-700"
+                : "border-transparent hover:border-orange-400"
             }`}
           >
             <CalendarIcon className="h-4 w-4" />
@@ -788,13 +891,13 @@ export default function CashierInterface() {
             <div className="mb-4">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-lg font-bold">Menu</h3>
-                <div className="flex gap-2 ">
+                <div className="flex gap-2">
                   <Select 
                     value={newOrder.type}
                     onValueChange={(value: "sur place" | "à emporter" | "livraison") =>
                       setNewOrder({ ...newOrder, type: value })
                     }
-                       >
+                  >
                     <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="Type de commande" />
                     </SelectTrigger>
@@ -864,6 +967,7 @@ export default function CashierInterface() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {/* Menu Items */}
               {filteredMenuItems.map((item) => (
                 <Card
                   key={item.id}
@@ -872,7 +976,7 @@ export default function CashierInterface() {
                 >
                   <div className="relative h-44 w-full">
                     <Image
-                      src={item.image || "/placeholder.svg?height=128&width=200"}
+                      src={item.imageUrl || "/placeholder.svg?height=128&width=200"}
                       alt={item.name}
                       fill
                       className="object-cover rounded-t-lg"
@@ -886,6 +990,36 @@ export default function CashierInterface() {
                   </CardContent>
                 </Card>
               ))}
+
+              {/* Packs */}
+              {packs
+                .filter((pack) => pack.is_available)
+                .map((pack) => (
+                  <Card
+                    key={pack.id}
+                    className="cursor-pointer hover:border-orange-300 transition-colors"
+                    onClick={() => addPackToOrder(pack)}
+                  >
+                    <div className="relative h-44 w-full">
+                      <Image
+                        src={pack.imageUrl || "/placeholder.svg?height=128&width=200"}
+                        alt={pack.name}
+                        fill
+                        className="object-cover rounded-t-lg"
+                      />
+                    </div>
+                    <CardHeader className="p-3 pb-0">
+                      <CardTitle className="text-sm">{pack.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-1">
+                      <p className="text-sm text-neutral-500 mb-1">{pack.description}</p>
+                      <div className="flex justify-between items-center">
+                        <p className="text-lg font-bold text-orange-600">{formatPrice(pack.price)}</p>
+                        <Badge className="bg-orange-500">{pack.pack_details.length} articles</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
             </div>
           </div>
 

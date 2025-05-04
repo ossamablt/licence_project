@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import api from "@/lib/api"
 import type { MenuItem as BaseMenuItem, Table, OrderItem } from "@/lib/sharedDataService"
 import { get } from "http"
+import { Badge } from "@/components/ui/badge"
 
 type MenuItem = BaseMenuItem & {
   imageUrl?: string
@@ -59,6 +60,7 @@ export default function ServerInterface() {
   const [loading, setLoading] = useState(true)
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
+  const [packs, setPacks] = useState<any[]>([])
 
   // Category mapping for the database
  
@@ -108,7 +110,7 @@ const categoryMap: { [key: number]: string } = {
           id: table.id,
           number: table.num_table,
           seats: table.capacity,
-          status: table.status, // Utiliser directement le statut de la BDD
+          status: table.status,
           orderId: table.order_id
         })))
       }
@@ -129,7 +131,6 @@ const categoryMap: { [key: number]: string } = {
           )
         } else {
           console.warn("Could not load menu items from API, using mock data")
-          
           toast({
             title: "Mode démo",
             description: "Utilisation des données de démonstration pour le menu",
@@ -138,26 +139,63 @@ const categoryMap: { [key: number]: string } = {
       } catch (error) {
         console.warn("Error loading menu items:", error)
       }
-      // Get orders orderPayload 
+
+      // Get packs with their details
+      try {
+        const packsResponse = await api.get("/packs")
+        if (packsResponse.data && Array.isArray(packsResponse.data.packs)) {
+          // First, get all menu items to map pack details
+          const menuItemsMap = new Map(menuItems.map(item => [item.id, item]))
+          
+          const loadedPacks = packsResponse.data.packs.map((pack: any) => {
+            // Map pack details to include menu item information
+            const packDetails = pack.pack_details.map((detail: any) => ({
+              item_id: detail.item_id,
+              quantity: detail.quantity,
+              menuItem: menuItemsMap.get(detail.item_id)
+            }))
+
+            return {
+              id: pack.id,
+              name: pack.name,
+              description: pack.description || "",
+              price: pack.price,
+              is_available: pack.is_available,
+              imageUrl: pack.imageUrl || "/placeholder.svg",
+              pack_details: packDetails
+            }
+          })
+
+          setPacks(loadedPacks)
+        }
+      } catch (error) {
+        console.warn("Error loading packs:", error)
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les packs",
+          variant: "destructive"
+        })
+      }
+
+      // Get orders
       try {
         const ordersResponse = await api.get("/orders")
         if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
           const ordersWithItems = await Promise.all(
             ordersResponse.data.orders.map(async (order: any) => {
-              // Process order items with async/await
               const orderItems = await Promise.all(
                 order.order_details.map(async (detail: any, index: number) => {
-                  const itemName = await getItemNameById(detail.item_id);
+                  const itemName = await getItemNameById(detail.item_id)
                   return {
                     id: index + 1,
                     menuItemId: detail.item_id,
-                    name: itemName || `Item #${detail.item_id}`, // Fallback name
+                    name: itemName || `Item #${detail.item_id}`,
                     price: detail.price,
                     quantity: detail.quantity,
-                  };
+                  }
                 })
-              );
-      
+              )
+
               return {
                 id: order.id,
                 tableNumber: order.table_id,
@@ -167,22 +205,21 @@ const categoryMap: { [key: number]: string } = {
                 total: orderItems.reduce((sum: number, item) => sum + (item.price * item.quantity), 0),
                 notifiedKitchen: order.notified_kitchen || false,
                 notifiedCashier: order.notified_cashier || false,
-              };
+              }
             })
-          );
-          
-          setOrders(ordersWithItems);
+          )
+          setOrders(ordersWithItems)
         }
-          } catch (error) {
-            console.error("Error loading orders:", error);
-            setOrders([]);
-          }
-        } catch (error) {
-          console.error("Erreur lors du chargement des données :", error);
-        } finally {
-          setLoading(false);
-        }
-      };
+      } catch (error) {
+        console.error("Error loading orders:", error)
+        setOrders([])
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement des données :", error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Start new order
   const startNewOrder = () => {
@@ -332,8 +369,6 @@ const categoryMap: { [key: number]: string } = {
       description: `${item.name} ajouté à la commande`,
     })
   }
-
-
 
   const deleteOrder = async (orderId: number) => {
     try {
@@ -591,6 +626,47 @@ const categoryMap: { [key: number]: string } = {
     }
   }
 
+  // Add pack to order
+  const addPackToOrder = (pack: any) => {
+    if (!newOrder) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez d'abord sélectionner une table",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Create order items from pack details
+    const packItems = pack.pack_details.map((detail: any) => {
+      const menuItem = detail.menuItem
+      return {
+        id: newOrder.items.length + 1,
+        menuItemId: detail.item_id,
+        name: menuItem ? menuItem.name : `Item #${detail.item_id}`,
+        price: menuItem ? menuItem.price : 0,
+        quantity: detail.quantity
+      }
+    })
+
+    // Add all pack items to the order
+    const updatedItems = [...newOrder.items, ...packItems]
+
+    // Calculate the new total including the pack price
+    const newTotal = updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+
+    setNewOrder({
+      ...newOrder,
+      items: updatedItems,
+      total: newTotal
+    })
+
+    toast({
+      title: "Pack ajouté",
+      description: `${pack.name} ajouté à la commande`,
+    })
+  }
+
   if (loading && tables.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-blue-50/50">
@@ -802,60 +878,115 @@ const categoryMap: { [key: number]: string } = {
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Commande - Table {selectedTable?.number}</DialogTitle>
-            <DialogDescription>Sélectionnez les articles pour la commande</DialogDescription>
+            <DialogDescription>Sélectionnez les articles et packs pour la commande</DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-6">
-            {/* Menu Items */}
+            {/* Menu Items and Packs */}
             <div className="space-y-4">
-              <h3 className="font-medium">Menu</h3>
+              <Tabs defaultValue="menu" className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="menu">Menu</TabsTrigger>
+                  <TabsTrigger value="packs">Packs</TabsTrigger>
+                </TabsList>
 
-              <div className="mb-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <Button
-                    variant={selectedCategory === "all" ? "default" : "outline"}
-                    onClick={() => setSelectedCategory("all")}
-                    className="whitespace-nowrap"
-                    size="sm"
-                  >
-                    Tous
-                  </Button>
-                  {Array.from(new Set(menuItems.map((item) => item.category))).map((category) => (
-                    <Button
-                      key={category}
-                      variant={selectedCategory === category ? "default" : "outline"}
-                      onClick={() => setSelectedCategory(category)}
-                      className="whitespace-nowrap"
-                      size="sm"
-                    >
-                      {category}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2">
-                {filteredMenuItems.map((item) => (
-                  <Card
-                    key={item.id}
-                    className="cursor-pointer hover:border-blue-300 transition-colors"
-                    onClick={() => addItemToOrder(item)}
-                  >
-                    <CardContent className="p-3 flex items-center gap-3">
-                      <img
-                        src={item.imageUrl || "/placeholder.svg?height=100&width=100"}
-                        alt={item.name}
-                        className="w-12 h-12 rounded-md object-cover"
-                      />
-                      <div className="flex-1">
-                        <h4 className="font-medium">{item.name}</h4>
-                        <p className="text-sm text-neutral-500">{item.category}</p>
+                {/* Menu Items Tab */}
+                <TabsContent value="menu">
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Menu</h3>
+                    <div className="mb-4">
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        <Button
+                          variant={selectedCategory === "all" ? "default" : "outline"}
+                          onClick={() => setSelectedCategory("all")}
+                          className="whitespace-nowrap"
+                          size="sm"
+                        >
+                          Tous
+                        </Button>
+                        {Array.from(new Set(menuItems.map((item) => item.category))).map((category) => (
+                          <Button
+                            key={category}
+                            variant={selectedCategory === category ? "default" : "outline"}
+                            onClick={() => setSelectedCategory(category)}
+                            className="whitespace-nowrap"
+                            size="sm"
+                          >
+                            {category}
+                          </Button>
+                        ))}
                       </div>
-                      <span className="font-medium">{formatPrice(item.price)}</span>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2">
+                      {filteredMenuItems.map((item) => (
+                        <Card
+                          key={item.id}
+                          className="cursor-pointer hover:border-blue-300 transition-colors"
+                          onClick={() => addItemToOrder(item)}
+                        >
+                          <CardContent className="p-3 flex items-center gap-3">
+                            <img
+                              src={item.imageUrl || "/placeholder.svg?height=100&width=100"}
+                              alt={item.name}
+                              className="w-12 h-12 rounded-md object-cover"
+                            />
+                            <div className="flex-1">
+                              <h4 className="font-medium">{item.name}</h4>
+                              <p className="text-sm text-neutral-500">{item.category}</p>
+                            </div>
+                            <span className="font-medium">{formatPrice(item.price)}</span>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Packs Tab */}
+                <TabsContent value="packs">
+                  <div className="space-y-4">
+                    <h3 className="font-medium">Packs</h3>
+                    <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto pr-2">
+                      {packs
+                        .filter((pack) => pack.is_available)
+                        .map((pack) => (
+                          <Card
+                            key={pack.id}
+                            className="cursor-pointer hover:border-orange-300 transition-colors"
+                            onClick={() => {
+                              if (!newOrder) {
+                                toast({
+                                  title: "Erreur",
+                                  description: "Veuillez d'abord sélectionner une table",
+                                  variant: "destructive"
+                                })
+                                return
+                              }
+                              addPackToOrder(pack)
+                            }}
+                          >
+                            <CardContent className="p-3 flex items-center gap-3">
+                              <img
+                                src={pack.imageUrl || "/placeholder.svg"}
+                                alt={pack.name}
+                                className="w-12 h-12 rounded-md object-cover"
+                              />
+                              <div className="flex-1">
+                                <h4 className="font-medium">{pack.name}</h4>
+                                <p className="text-sm text-neutral-500">{pack.description}</p>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="font-medium">{formatPrice(pack.price)}</span>
+                                <Badge className="bg-orange-500 mt-1">{pack.pack_details.length} articles</Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </div>
 
             {/* Current Order */}
@@ -890,15 +1021,14 @@ const categoryMap: { [key: number]: string } = {
             </div>
           </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsNewOrderDialogOpen(false)}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsNewOrderDialogOpen(false)}>
               Annuler
-              </Button>
-              <Button
+            </Button>
+            <Button
               onClick={async () => {
                 const prevTableId = selectedTable?.id;
                 await sendOrderToKitchen();
-                // If order sent successfully, update table status to "occupied" and color to blue
                 if (prevTableId) {
                   setTables((prev) =>
                     prev.map((t) =>
@@ -912,10 +1042,10 @@ const categoryMap: { [key: number]: string } = {
               }}
               disabled={!newOrder || newOrder.items.length === 0}
               className="bg-blue-500 hover:bg-blue-600"
-              >
+            >
               Enregistrer la commande
-              </Button>
-            </DialogFooter>
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

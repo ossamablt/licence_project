@@ -92,7 +92,35 @@ export function EmployeeManagement() {
       setEmployees(employees.filter((emp) => emp.id !== id))
 
       // Show success alert
-      window.alert("Employé supprimé avec succès.")
+     // Show a modern toast notification instead of alert
+     if (typeof window !== "undefined" && "Notification" in window) {
+      // Optionally use browser notifications if allowed
+      if (Notification.permission === "granted") {
+        new Notification("employee supprimé avec succès.")
+      } else {
+        // Fallback to a simple toast div
+        const toast = document.createElement("div")
+        toast.textContent = "Produit supprimé avec succès."
+        toast.style.position = "fixed"
+        toast.style.bottom = "32px"
+        toast.style.right = "32px"
+        toast.style.background = "#f97316"
+        toast.style.color = "#fff"
+        toast.style.padding = "14px 24px"
+        toast.style.borderRadius = "8px"
+        toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
+        toast.style.fontSize = "1rem"
+        toast.style.zIndex = "9999"
+        toast.style.opacity = "0"
+        toast.style.transition = "opacity 0.3s"
+        document.body.appendChild(toast)
+        setTimeout(() => { toast.style.opacity = "1" }, 10)
+        setTimeout(() => {
+      toast.style.opacity = "0"
+      setTimeout(() => document.body.removeChild(toast), 300)
+        }, 2000)
+      }
+    }
     } catch (error) {
       console.error("Erreur lors de la suppression de l'employé", error)
       window.alert("Erreur lors de la suppression de l'employé.")
