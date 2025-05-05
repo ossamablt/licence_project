@@ -620,16 +620,50 @@ export default function CashierInterface() {
 
       if (isEditingReservation && selectedReservation) {
         await api.put(`/reservation/${selectedReservation.id}`, reservationData)
-        toast({
-          title: "Succès",
-          description: "Réservation mise à jour avec succès",
-        })
+        // Add success alert
+        const toast = document.createElement("div")
+        toast.textContent = "Réservation modifiée avec succès."
+        toast.style.position = "fixed"
+        toast.style.bottom = "32px"
+        toast.style.right = "32px"
+        toast.style.background = "#f97316"
+        toast.style.color = "#fff"
+        toast.style.padding = "14px 24px"
+        toast.style.borderRadius = "8px"
+        toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
+        toast.style.fontSize = "1rem"
+        toast.style.zIndex = "9999"
+        toast.style.opacity = "0"
+        toast.style.transition = "opacity 0.3s"
+        document.body.appendChild(toast)
+        setTimeout(() => { toast.style.opacity = "1" }, 10)
+        setTimeout(() => {
+          toast.style.opacity = "0"
+          setTimeout(() => document.body.removeChild(toast), 300)
+        }, 2000)
       } else {
         await api.post("/reservation", reservationData)
-        toast({
-          title: "Succès",
-          description: "Réservation ajoutée avec succès",
-        })
+        // Add success alert
+        const toast = document.createElement("div")
+        toast.textContent = "Réservation ajoutée avec succès."
+        toast.style.position = "fixed"
+        toast.style.bottom = "32px"
+        toast.style.right = "32px"
+        toast.style.background = "#f97316"
+        toast.style.color = "#fff"
+        toast.style.padding = "14px 24px"
+        toast.style.borderRadius = "8px"
+        toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
+        toast.style.fontSize = "1rem"
+        toast.style.zIndex = "9999"
+        toast.style.opacity = "0"
+        toast.style.transition = "opacity 0.3s"
+        document.body.appendChild(toast)
+        setTimeout(() => { toast.style.opacity = "1" }, 10)
+        setTimeout(() => {
+          toast.style.opacity = "0"
+          setTimeout(() => document.body.removeChild(toast), 300)
+        }, 2000)
       }
 
       // Refresh both today's reservations and the selected date's reservations
@@ -1648,10 +1682,27 @@ export default function CashierInterface() {
                         num_table: tableFormData.num_table,
                         capacity: tableFormData.capacity
                     });
-                    toast({
-                        title: "Succès",
-                        description: "Table mise à jour avec succès",
-                    });
+                    // Add success alert for table update
+                    const toast = document.createElement("div")
+                    toast.textContent = "Table mise à jour avec succès."
+                    toast.style.position = "fixed"
+                    toast.style.bottom = "32px"
+                    toast.style.right = "32px"
+                    toast.style.background = "#f97316"
+                    toast.style.color = "#fff"
+                    toast.style.padding = "14px 24px"
+                    toast.style.borderRadius = "8px"
+                    toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
+                    toast.style.fontSize = "1rem"
+                    toast.style.zIndex = "9999"
+                    toast.style.opacity = "0"
+                    toast.style.transition = "opacity 0.3s"
+                    document.body.appendChild(toast)
+                    setTimeout(() => { toast.style.opacity = "1" }, 10)
+                    setTimeout(() => {
+                      toast.style.opacity = "0"
+                      setTimeout(() => document.body.removeChild(toast), 300)
+                    }, 2000)
                   } else {
                     // Création d'une nouvelle table
                     await api.post("/tables", {
@@ -1659,10 +1710,27 @@ export default function CashierInterface() {
                         capacity: tableFormData.capacity,
                         status: "free"
                     });
-                    toast({
-                        title: "Succès",
-                        description: "Table ajoutée avec succès",
-                    });
+                    // Add success alert for new table
+                    const toast = document.createElement("div")
+                    toast.textContent = "Table ajoutée avec succès."
+                    toast.style.position = "fixed"
+                    toast.style.bottom = "32px"
+                    toast.style.right = "32px"
+                    toast.style.background = "#f97316"
+                    toast.style.color = "#fff"
+                    toast.style.padding = "14px 24px"
+                    toast.style.borderRadius = "8px"
+                    toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
+                    toast.style.fontSize = "1rem"
+                    toast.style.zIndex = "9999"
+                    toast.style.opacity = "0"
+                    toast.style.transition = "opacity 0.3s"
+                    document.body.appendChild(toast)
+                    setTimeout(() => { toast.style.opacity = "1" }, 10)
+                    setTimeout(() => {
+                      toast.style.opacity = "0"
+                      setTimeout(() => document.body.removeChild(toast), 300)
+                    }, 2000)
                   }
                   
                   fetchTables(); // Rafraîchir la liste des tables
