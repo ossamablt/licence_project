@@ -45,6 +45,7 @@ import {
   createOrder,
   notifyKitchen,
   getMenuItems,
+  getTables,
   type Order,
   type Table as TableType,
   type OrderItem,
@@ -59,6 +60,9 @@ interface TableInterface {
   capacity: number
   created_at: string | null
   updated_at: string | null
+  number: number
+  seats: number
+  status: "free" | "occupied" | "reserved"
 }
 
 interface Reservation {
@@ -170,15 +174,16 @@ export default function CashierInterface() {
   const fetchTodayReservations = async () => {
     try {
       const today = new Date()
-      const formattedDate = today.toISOString().split("T")[0]
+      const formattedDate = formatLocalDate(today)
+      
       const response = await api.get(`/reservation?date=${formattedDate}`)
-      if (response.data && response.data.reservations) {
+      if (response.data?.reservations) {
         setTodayReservations(response.data.reservations)
       } else {
         setTodayReservations([])
       }
     } catch (error) {
-      console.error("Échec de récupération des réservations du jour:", error)
+      console.error("Échec de récupération des réservations:", error)
       toast({
         title: "Erreur",
         description: "Impossible de charger les réservations du jour",
@@ -195,18 +200,7 @@ export default function CashierInterface() {
     setDate(today) // Set initial date to today
     fetchTodayReservations()
     fetchReservationsbyDate(today) // Load today's reservations for planning
-  
-    const intervalId = setInterval(() => {
-      loadData()
-      fetchTodayReservations()
-      if (date && date.toDateString() === new Date().toDateString()) {
-        fetchReservationsbyDate(date)
-      }
-    }, 5000)
-  
-    return () => {
-      clearInterval(intervalId)
-    }
+    // No polling/interval here
   }, [])
 
   // Update the fetchReservationsbyDate function
@@ -259,13 +253,16 @@ export default function CashierInterface() {
     } catch (error) {
       console.error("Erreur lors de la récupération des tables:", error)
       // Fallback to mock data from sharedDataService
-      const { getTables } = require("@/lib/sharedDataService")
+     
       const mockTables = getTables().map((table: { id: number; number: number; seats: number }) => ({
         id: table.id,
         num_table: table.number,
         capacity: table.seats,
         created_at: null,
         updated_at: null,
+        number: table.number,
+        seats: table.seats,
+        status: "free" as "free",
       }))
       setTables(mockTables)
       toast({
@@ -517,22 +514,19 @@ export default function CashierInterface() {
   // Sélectionner une table
   const selectTable = (table: TableType) => {
     setSelectedTable(table)
-
-    // Switch to orders tab when selecting a table
     setActiveTab("commandes")
 
-    // Check if there's an existing order for this table
-    const order = getOrderByTableId(table.id)
-    if (order) {
-      setCurrentOrder(order)
-      setOrderToProcess(order)
-
-      // If there's a ready order, open payment dialog
-      if (order.status === "ready") {
+    // Récupérer les commandes de la table
+    const tableOrders = orders.filter(order => order.tableId === table.id)
+    if (tableOrders.length > 0) {
+      setCurrentOrder(tableOrders[0])
+      setOrderToProcess(tableOrders[0])
+      
+      // Si une commande est prête, ouvrir directement la boîte de dialogue de paiement
+      if (tableOrders.some(order => order.status === "ready" && !order.notifiedCashier)) {
         setPaymentDialogOpen(true)
       }
     } else {
-      // Reset current order for new table
       setCurrentOrder(null)
       setNewOrder({
         type: "sur place",
@@ -1001,72 +995,54 @@ export default function CashierInterface() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {tables.map((table) => {
-                // Convert the API table format to the format expected by selectTable
-                const tableForSelection: TableType = {
-                  id: table.id,
-                  number: table.num_table,
-                  seats: table.capacity,
-                  status: "free", // Default to free, but we should determine the real status
-                }
-
-                // Check if there's an active order for this table
-                const hasActiveOrder = getOrderByTableId(table.id)
+                const tableOrders = orders.filter(order => order.tableId === table.id)
+                const hasActiveOrder = tableOrders.some(order => order.status === "ready")
+                const isOccupied = tableOrders.some(order => order.status !== "paid")
 
                 return (
                   <Card
                     key={table.id}
-                    className={`cursor-pointer hover:border-blue-300 transition-colors relative`}
-                    onClick={() => selectTable(tableForSelection)}
+                    className={`cursor-pointer hover:border-blue-300 transition-colors relative ${
+                      isOccupied ? "border-blue-300 bg-blue-50" : "border-gray-300 bg-gray-50"
+                    }`}
+                    onClick={() => selectTable(table)}
                   >
-                  <CardHeader className="p-3 pb-0">
-    <CardTitle className="text-sm flex justify-between items-center">
-      <span>Table {table.num_table}</span>
-      <div className="flex gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 rounded-full hover:bg-orange-50"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedTable(tableForSelection);
-            setEditTableDialogOpen(true);
-          }}
-        >
-          <Pencil className="h-3 w-3 text-orange-600" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 rounded-full hover:bg-red-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirm("Supprimer cette table ?")) {
-              deleteTable(table.id);
-            }
-          }}
-        >
-          <Trash2 className="h-3 w-3 text-red-600" />
-        </Button>
-      </div>
-    </CardTitle>
-  </CardHeader>
+                    <CardHeader className="p-3 pb-0">
+                      <CardTitle className="text-sm flex justify-between items-center">
+                        <span>Table {table.num_table}</span>
+                        <Badge className={isOccupied ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
+                          {isOccupied ? "Occupée" : "Libre"}
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
                     <CardContent className="p-3 pt-1">
                       <p className="text-lg font-bold text-blue-600">{table.capacity} places</p>
-                      {hasActiveOrder && (
-                        <Button
-                          className="mt-2 w-full bg-green-500 hover:bg-green-600 text-white text-xs py-1"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const order = getOrderByTableId(table.id)
-                            if (order) {
-                              setOrderToProcess(order)
-                              setPaymentDialogOpen(true)
-                            }
-                          }}
-                        >
-                          <CreditCard className="h-3 w-3 mr-1" />
-                          Encaisser
-                        </Button>
+                      {isOccupied && (
+                        <div className="mt-2 space-y-2">
+                          <Button
+                            className="w-full bg-green-500 hover:bg-green-600 text-white text-xs py-1"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const readyOrder = tableOrders.find(order => 
+                                order.status === "ready" && !order.notifiedCashier
+                              )
+                              if (readyOrder) {
+                                setOrderToProcess(readyOrder)
+                                setPaymentDialogOpen(true)
+                              } else {
+                                selectTable(table)
+                              }
+                            }}
+                          >
+                            <CreditCard className="h-3 w-3 mr-1" />
+                            {hasActiveOrder ? "Encaisser" : "Voir commandes"}
+                          </Button>
+                          {tableOrders.length > 0 && (
+                            <div className="text-xs text-gray-500">
+                              {tableOrders.length} commande{tableOrders.length > 1 ? 's' : ''} en cours
+                            </div>
+                          )}
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -1089,50 +1065,55 @@ export default function CashierInterface() {
             <div className="mt-6 border-t pt-4">
               <h4 className="font-medium mb-3">Réservations du jour</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {todayReservations && todayReservations.length > 0 ? (
-                  todayReservations?.map((reservation) => (
-                    <div key={reservation.id} className="border rounded-md p-3 bg-blue-50/50">
-                      <div className="flex justify-between items-start">
-                        <div>
+                {todayReservations ? (
+                  todayReservations.length > 0 ? (
+                    todayReservations.map((reservation) => (
+                      <div key={reservation.id} className="border rounded-md p-3 bg-blue-50/50">
+                        <div className="flex justify-between items-start">
                           <div>
-                            <span className="font-medium">{reservation.client_name}</span>
+                            <div>
+                              <span className="font-medium">{reservation.client_name}</span>
+                            </div>
+                            <div className="flex items-center text-sm text-gray-500 mt-1">
+                              <Clock className="h-3 w-3 mr-1" />
+                              <span>{reservation.hour}</span>
+                              {reservation.tables_id && (
+                                <>
+                                  <span className="mx-2">•</span>
+                                  <span>Table {reservation.tables_id}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
-
-                          <div className="flex items-center text-sm text-gray-500 mt-1">
-                            <Clock className="h-3 w-3 mr-1" />
-                            <span>{reservation.hour}</span>
-                            {reservation.tables_id && (
-                              <>
-                                <span className="mx-2">•</span>
-                                <span>Table {reservation.tables_id}</span>
-                              </>
-                            )}
+                          <div className="flex gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => editReservation(reservation)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-red-500"
+                              onClick={() => deleteReservation(reservation.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            onClick={() => editReservation(reservation)}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-red-500"
-                            onClick={() => deleteReservation(reservation.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full text-center py-4 text-gray-500">
+                      Aucune réservation pour aujourd'hui
                     </div>
-                  ))
+                  )
                 ) : (
                   <div className="col-span-full text-center py-4 text-gray-500">
-                    Aucune réservation pour aujourd&apos;hui
+                    Chargement des réservations...
                   </div>
                 )}
               </div>
@@ -1633,39 +1614,74 @@ export default function CashierInterface() {
             </div>
           </div>
 
-          <DialogFooter >
-      {selectedTable && (
-        <Button 
-          variant="destructive"
-          onClick={async () => {
-            if (confirm("Êtes-vous sûr de vouloir supprimer cette table ?")) {
-              await deleteTable(selectedTable.id);
-              setEditTableDialogOpen(false);
-            }
-          }}
-          className="mr-auto  bg-red-500"
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          Supprimer
-        </Button>
-      )}
-      <Button
-        variant="outline"
-        onClick={() => {
-          setEditTableDialogOpen(false);
-        }}
-      >
-        Annuler
-      </Button>
-      <Button
-        className="bg-orange-500 hover:bg-orange-600"
-        onClick={async () => {
-          // ... existing save logic ...
-        }}
-      >
-        {selectedTable ? "Enregistrer" : "Ajouter"}
-      </Button>
-    </DialogFooter>
+          <DialogFooter>
+            {selectedTable && (
+              <Button 
+                variant="destructive"
+                onClick={async () => {
+                  if (confirm("Êtes-vous sûr de vouloir supprimer cette table ?")) {
+                    await deleteTable(selectedTable.id);
+                    setEditTableDialogOpen(false);
+                  }
+                }}
+                className="mr-auto bg-red-500"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Supprimer
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditTableDialogOpen(false);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              className="bg-orange-500 hover:bg-orange-600"
+              onClick={async () => {
+                try {
+                  if (selectedTable) {
+                    // Mise à jour de la table existante
+                    await api.put(`/tables/${selectedTable.id}`, {
+                        num_table: tableFormData.num_table,
+                        capacity: tableFormData.capacity
+                    });
+                    toast({
+                        title: "Succès",
+                        description: "Table mise à jour avec succès",
+                    });
+                  } else {
+                    // Création d'une nouvelle table
+                    await api.post("/tables", {
+                        num_table: tableFormData.num_table,
+                        capacity: tableFormData.capacity,
+                        status: "free"
+                    });
+                    toast({
+                        title: "Succès",
+                        description: "Table ajoutée avec succès",
+                    });
+                  }
+                  
+                  fetchTables(); // Rafraîchir la liste des tables
+                  setEditTableDialogOpen(false);
+                  setTableFormData({ num_table: 1, capacity: 2 }); // Réinitialiser le formulaire
+
+                } catch (error) {
+                  console.error("Erreur lors de l'opération sur la table:", error);
+                  toast({
+                    title: "Erreur",
+                    description: "Échec de l'opération sur la table",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              {selectedTable ? "Enregistrer" : "Ajouter"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

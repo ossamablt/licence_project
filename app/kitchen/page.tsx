@@ -96,39 +96,32 @@ export default function KitchenInterface() {
     getOrders()
     setLoading(false)
 
+    // Setup polling
+    const pollingInterval = setInterval(getOrders, 5000)
+    
     // Cleanup
     return () => {
       notificationService.unsubscribe("order.new", newOrderSubscription)
       notificationService.unsubscribe("kitchen.notification", kitchenNotificationSubscription)
       notificationService.disconnect()
+      clearInterval(pollingInterval)
     }
   }, [router])
 
   const getOrders = async () => {
     try {
-      setLoading(true);
-      
-      // First fetch menu items
       const menuResponse = await api.get("/menuItems");
       const menuItems = menuResponse.data?.["Menu Items"] || [];
       
-      // Then fetch orders
       const response = await api.get("/orders");
       
-      if (response.status !== 200) {
-        throw new Error("Failed to fetch orders");
-      }
+      if (response.status !== 200) throw new Error("Failed to fetch orders");
 
-      if (!response.data?.orders) {
-        throw new Error("Orders data is missing");
-      }
-
-      if (!Array.isArray(response.data.orders)) {
-        response.data.orders = [response.data.orders];
-      }
-
-      const data: Order[] = response.data.orders.map((o: any) => {
+      const newOrders: Order[] = (response.data?.orders || []).map((o: any) => {
         const items = Array.isArray(o.order_details) ? o.order_details : [];
+        
+        // Détecter les nouvelles commandes
+        const isNewOrder = !orders.some(existingOrder => existingOrder.id === o.id);
         
         return {
           id: o.id,
@@ -138,29 +131,42 @@ export default function KitchenInterface() {
             minute: "2-digit" 
           }),
           status: o.status,
-          items: items.map((item: any) => {
-            const menuItem = menuItems.find((menu: any) => menu.id === item.item_id);
-            return {
-              id: item.id,
-              name: menuItem?.name || `Item #${item.item_id}`,
-              quantity: item.quantity || "1",
-            };
-          }),
+          items: items.map((item: any) => ({
+            id: item.id,
+            name: menuItems.find((menu: any) => menu.id === item.item_id)?.name || `Item #${item.item_id}`,
+            quantity: item.quantity || "1",
+          })),
           notifiedKitchen: o.notified_kitchen || true,
           notifiedCashier: o.notified_cashier || false,
         };
       });
 
-      setOrders(data);
-      setSharedOrders(data);
+      // Mettre à jour seulement si il y a des changements
+      if (JSON.stringify(newOrders) !== JSON.stringify(orders)) {
+        setOrders(newOrders);
+        setSharedOrders(newOrders);
+        
+        // Notification pour nouvelles commandes
+        const newPendingOrders = newOrders.filter(order => 
+          order.status === "En attente" && 
+          !orders.some(existing => existing.id === order.id)
+        );
+        
+        if (newPendingOrders.length > 0) {
+          setNewOrderNotification(true);
+          toast({
+            title: "Nouvelles commandes",
+            description: `${newPendingOrders.length} nouvelle(s) commande(s) en attente`,
+          });
+        }
+      }
     } catch (error) {
       console.error("Error fetching orders:", error);
       toast({
         title: "Erreur",
-        description: "Impossible de charger les commandes.",
+        description: "Impossible de charger les commandes",
+        variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -175,48 +181,37 @@ export default function KitchenInterface() {
   // Update order status
   const updateOrderStatus = async (orderId: number, newStatus: "En attente" | "En préparation" | "Prête" | "Payée") => {
     try {
-      console.log("Updating order status:", { orderId, newStatus }); // Debug log
-
       const payload = {
-        status: newStatus
+        status: newStatus,
+        notified_kitchen: true
       };
-      console.log("Sending payload:", payload); // Debug log
 
       const { data } = await api.patch(`/orders/${orderId}`, payload);
-      console.log("Full API Response:", data); // Debug log
 
-      
+      // Mise à jour optimiste
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId 
+            ? { ...order, status: newStatus, notifiedKitchen: true }
+            : order
+        )
+      );
 
-      // Refresh the orders list to get the latest data
-      await getOrders();
-
-      // Show success toast
       toast({
         title: "Statut mis à jour",
         description: `La commande est maintenant ${newStatus.toLowerCase()}`,
       });
 
-      // Reset notification flag if we're starting to prepare an order
       if (newStatus === "En préparation") {
         setNewOrderNotification(false);
       }
     } catch (error) {
       console.error("Error updating order status:", error);
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { data?: { message?: string } } };
-        console.error("Error details:", axiosError.response?.data);
-        toast({
-          title: "Erreur",
-          description: axiosError.response?.data?.message || "Impossible de mettre à jour le statut de la commande",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Erreur",
-          description: "Impossible de mettre à jour le statut de la commande",
-          variant: "destructive",
-        });
-      }
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour le statut de la commande",
+        variant: "destructive",
+      });
     }
   };
 

@@ -16,6 +16,7 @@ import {
   LogOut,
   UtensilsCrossed,
   Users,
+  Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -86,8 +87,16 @@ export default function RestaurantManagement() {
     confirmPassword: "",
     employe_id: "",
   })
+  const [employees, setEmployees] = useState<any[]>([])
+  const [formErrors, setFormErrors] = useState({
+    userName: "",
+    password: "",
+    confirmPassword: "",
+    employe_id: "",
+  })
 
   const [isMobile, setIsMobile] = useState(false)
+  const [username, setUsername] = useState<string>("")
 
   // Handle screen resize
   useEffect(() => {
@@ -108,23 +117,46 @@ export default function RestaurantManagement() {
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
+    const storedUsername = localStorage.getItem("username") || ""
+
+    setUsername(storedUsername)
 
     if (!isLoggedIn || userRole !== "Gérant") {
       router.push("/")
     }
   }, [router])
 
-  // Load users when user management section is active
+  // Load users and employees when user management section is active
   useEffect(() => {
     if (activeSection === "users") {
       loadUsers()
+      loadEmployees()
     }
   }, [activeSection])
 
   const loadUsers = async () => {
     try {
-      const response = await api.get("/users")
-      setUsers(response.data)
+      const response = await api.get("/user")
+      console.log("Users response:", response.data) // Debug log
+      
+      if (response.data && response.data.user) {
+        console.log("Setting users from response.data.users:", response.data.users)
+        // Filter out users with Gérant role
+        const filteredUsers = response.data.user.filter((user: User) => user.employe?.role !== "Gérant")
+        setUsers(filteredUsers)
+      } else if (response.data && Array.isArray(response.data)) {
+        console.log("Setting users from response.data array:", response.data)
+        // Filter out users with Gérant role
+        const filteredUsers = response.data.filter((user: User) => user.employe?.role !== "Gérant")
+        setUsers(filteredUsers)
+      } else {
+        console.error("Invalid response format:", response.data)
+        toast({
+          title: "Erreur",
+          description: "Format de réponse invalide",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       console.error("Error loading users:", error)
       toast({
@@ -135,15 +167,57 @@ export default function RestaurantManagement() {
     }
   }
 
+  const loadEmployees = async () => {
+    try {
+      const response = await api.get("/employes")
+      setEmployees(response.data.employes)
+    } catch (error) {
+      console.error("Error loading employees:", error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les employés",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const validateForm = () => {
+    const errors = {
+      userName: "",
+      password: "",
+      confirmPassword: "",
+      employe_id: "",
+    }
+    let isValid = true
+
+    if (!userFormData.userName.trim()) {
+      errors.userName = "Le nom d'utilisateur est requis"
+      isValid = false
+    }
+
+    if (!selectedUser && !userFormData.password) {
+      errors.password = "Le mot de passe est requis"
+      isValid = false
+    }
+
+    if (!selectedUser && userFormData.password !== userFormData.confirmPassword) {
+      errors.confirmPassword = "Les mots de passe ne correspondent pas"
+      isValid = false
+    }
+
+    if (!userFormData.employe_id) {
+      errors.employe_id = "Veuillez sélectionner un employé"
+      isValid = false
+    }
+
+    setFormErrors(errors)
+    return isValid
+  }
+
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!selectedUser && userFormData.password !== userFormData.confirmPassword) {
-      toast({
-        title: "Erreur",
-        description: "Les mots de passe ne correspondent pas",
-        variant: "destructive",
-      })
+    if (!validateForm()) {
       return
     }
 
@@ -158,7 +232,7 @@ export default function RestaurantManagement() {
           updateData.password = userFormData.password
         }
         
-        await api.put(`/users/${selectedUser.id}`, updateData)
+        await api.put(`/user/${selectedUser.id}`, updateData)
         toast({
           title: "Succès",
           description: "Utilisateur mis à jour avec succès",
@@ -190,7 +264,7 @@ export default function RestaurantManagement() {
   const handleUserDelete = async (userId: number) => {
     if (confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) {
       try {
-        await api.delete(`/users/${userId}`)
+        await api.delete(`/user/${userId}`)
         toast({
           title: "Succès",
           description: "Utilisateur supprimé avec succès",
@@ -209,6 +283,12 @@ export default function RestaurantManagement() {
 
   const resetUserForm = () => {
     setUserFormData({
+      userName: "",
+      password: "",
+      confirmPassword: "",
+      employe_id: "",
+    })
+    setFormErrors({
       userName: "",
       password: "",
       confirmPassword: "",
@@ -272,8 +352,13 @@ export default function RestaurantManagement() {
     localStorage.removeItem("isLoggedIn")
     localStorage.removeItem("userRole")
     localStorage.removeItem("username")
-    router.push("/login")
+    router.push("/")
   }
+
+  // Add useEffect to monitor users state changes
+  useEffect(() => {
+    console.log("Current users state:", users)
+  }, [users])
 
   return (
     <div className="flex bg-orange-50/50 text-gray-800 relative">
@@ -335,10 +420,11 @@ export default function RestaurantManagement() {
             <div className="hidden md:flex items-center gap-2">
               <p className="text-gray-600">Bienvenue</p>
               <Avatar className="h-10 w-10 border-2 border-orange-100">
-                <AvatarImage src="/admin.jpeg?height=40&width=40" />
-                <AvatarFallback className="bg-orange-100 text-orange-700">MZ</AvatarFallback>
+                <AvatarFallback className="bg-orange-100 text-orange-700">
+                  {username ? username.charAt(0).toUpperCase() : "A"}
+                </AvatarFallback>
               </Avatar>
-              <span className="font-medium">{localStorage.getItem("username")}</span>
+              <span className="font-medium">{username}</span>
             </div>
             <Button variant="destructive" onClick={() => setShowLogoutConfirmation(true)}>
               <LogOut className="h-4 w-4 mr-2" />
@@ -357,11 +443,15 @@ export default function RestaurantManagement() {
         {activeSection === "users" && (
           <div className="space-y-6">
             <div className="flex justify-end">
-              <Button onClick={() => {
-                resetUserForm()
-                setUserDialogOpen(true)
-              }}>
-                Ajouter un Utilisateur
+              <Button 
+                onClick={() => {
+                  resetUserForm()
+                  setUserDialogOpen(true)
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nouvel Utilisateur
               </Button>
             </div>
 
@@ -369,33 +459,52 @@ export default function RestaurantManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>ID</TableHead>
                     <TableHead>Nom d'utilisateur</TableHead>
+                    <TableHead>Employé</TableHead>
                     <TableHead>Rôle</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>{user.userName}</TableCell>
-                      <TableCell>{user.employe.role}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          className="mr-2"
-                          onClick={() => openUserEditDialog(user)}
-                        >
-                          Modifier
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={() => handleUserDelete(user.id)}
-                        >
-                          Supprimer
-                        </Button>
+                  {users && users.length > 0 ? (
+                    users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.id}</TableCell>
+                        <TableCell>{user.userName}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const employee = employees.find(emp => emp.id === user.employe_id);
+                            return employee 
+                              ? `${employee.name} ${employee.lastName || ''}`
+                              : "Non assigné";
+                          })()}
+                        </TableCell>
+                        <TableCell>{user.employe?.role || "Non assigné"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            className="mr-2"
+                            onClick={() => openUserEditDialog(user)}
+                          >
+                            Modifier
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleUserDelete(user.id)}
+                          >
+                            Supprimer
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-4">
+                        Aucun utilisateur trouvé
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -406,16 +515,13 @@ export default function RestaurantManagement() {
         <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>
-                {selectedUser ? "Modifier l'utilisateur" : "Ajouter un utilisateur"}
-              </DialogTitle>
+              <DialogTitle>{selectedUser ? "Modifier l'utilisateur" : "Ajouter un utilisateur"}</DialogTitle>
               <DialogDescription>
                 {selectedUser
-                  ? "Modifiez les informations de l'utilisateur"
-                  : "Remplissez les informations pour créer un nouvel utilisateur"}
+                  ? "Modifiez les informations de l'utilisateur."
+                  : "Remplissez les informations pour créer un nouvel utilisateur."}
               </DialogDescription>
             </DialogHeader>
-
             <form onSubmit={handleUserSubmit}>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
@@ -423,11 +529,12 @@ export default function RestaurantManagement() {
                   <Input
                     id="userName"
                     value={userFormData.userName}
-                    onChange={(e) =>
-                      setUserFormData({ ...userFormData, userName: e.target.value })
-                    }
-                    required
+                    onChange={(e) => setUserFormData({ ...userFormData, userName: e.target.value })}
+                    className={formErrors.userName ? "border-red-500" : ""}
                   />
+                  {formErrors.userName && (
+                    <p className="text-sm text-red-500">{formErrors.userName}</p>
+                  )}
                 </div>
 
                 <div className="grid gap-2">
@@ -438,11 +545,12 @@ export default function RestaurantManagement() {
                     id="password"
                     type="password"
                     value={userFormData.password}
-                    onChange={(e) =>
-                      setUserFormData({ ...userFormData, password: e.target.value })
-                    }
-                    required={!selectedUser}
+                    onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                    className={formErrors.password ? "border-red-500" : ""}
                   />
+                  {formErrors.password && (
+                    <p className="text-sm text-red-500">{formErrors.password}</p>
+                  )}
                 </div>
 
                 {!selectedUser && (
@@ -452,32 +560,35 @@ export default function RestaurantManagement() {
                       id="confirmPassword"
                       type="password"
                       value={userFormData.confirmPassword}
-                      onChange={(e) =>
-                        setUserFormData({ ...userFormData, confirmPassword: e.target.value })
-                      }
-                      required
+                      onChange={(e) => setUserFormData({ ...userFormData, confirmPassword: e.target.value })}
+                      className={formErrors.confirmPassword ? "border-red-500" : ""}
                     />
+                    {formErrors.confirmPassword && (
+                      <p className="text-sm text-red-500">{formErrors.confirmPassword}</p>
+                    )}
                   </div>
                 )}
 
                 <div className="grid gap-2">
-                  <Label htmlFor="employe_id">Rôle</Label>
+                  <Label htmlFor="employe_id">Employé</Label>
                   <Select
                     value={userFormData.employe_id}
-                    onValueChange={(value) =>
-                      setUserFormData({ ...userFormData, employe_id: value })
-                    }
+                    onValueChange={(value) => setUserFormData({ ...userFormData, employe_id: value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un rôle" />
+                    <SelectTrigger className={formErrors.employe_id ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Sélectionner un employé" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Serveur</SelectItem>
-                      <SelectItem value="2">Cuisinier</SelectItem>
-                      <SelectItem value="3">Caissier</SelectItem>
-                      <SelectItem value="4">Admin</SelectItem>
+                      {employees.map((employee) => (
+                        <SelectItem key={employee.id} value={employee.id.toString()}>
+                          {employee.name} - {employee.role}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {formErrors.employe_id && (
+                    <p className="text-sm text-red-500">{formErrors.employe_id}</p>
+                  )}
                 </div>
               </div>
 

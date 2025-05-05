@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,17 +15,28 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { OlirabLogo } from "@/components/olirab-logo"
-import { Search, Plus, Clock, ChefHat, Bell, CreditCard, Coffee, LogOut } from "lucide-react"
+import { Search, Plus, Clock, ChefHat, Bell, CreditCard, Coffee, LogOut, Trash2 } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { LogoutConfirmationDialog } from "@/components/logout-confirmation-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import api from "@/lib/api"
-import type { MenuItem as BaseMenuItem, Table, OrderItem } from "@/lib/sharedDataService"
-import { get } from "http"
 import { Badge } from "@/components/ui/badge"
 
-type MenuItem = BaseMenuItem & {
+interface MenuItem {
+  id: number
+  name: string
+  description: string
+  price: number
+  category: string
   imageUrl?: string
+}
+
+interface Table {
+  id: number
+  number: number
+  seats: number
+  status: string
+  orderId?: number
 }
 
 interface TableOrder {
@@ -34,18 +45,21 @@ interface TableOrder {
   user_id: number
   type: string
   time: string
-  status: "En attente" | "En préparation" | "Prête" | "Payée"
-  items: orderItems[]
+  status: "En attente" | "En préparation" | "Prête" | "Payée" | "Annulée"
+  items: OrderItem[]
   total: number
-
+  notifiedKitchen?: boolean
+  notifiedCashier?: boolean
 }
-export interface orderItems {
+
+interface OrderItem {
   id: number
   menuItemId: number
   name: string
   price: number
   quantity: number
 }
+
 export default function ServerInterface() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("tables")
@@ -61,20 +75,20 @@ export default function ServerInterface() {
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [packs, setPacks] = useState<any[]>([])
+  const [ws] = useState(() => new WebSocket('ws://localhost:3001'))
 
   // Category mapping for the database
- 
-const categoryMap: { [key: number]: string } = {
-  1: "Burgers",
-  2: "Tacos",
-  3: "Frites",
-  4: "Pizzas",
-  5: "suchis",
-  6: "Desserts",
-  7: "Boissons",
- 
-}
-  // Check authentication and load initial data
+  const categoryMap: { [key: number]: string } = {
+    1: "Burgers",
+    2: "Tacos",
+    3: "Frites",
+    4: "Pizzas",
+    5: "Sushis",
+    6: "Desserts",
+    7: "Boissons",
+  }
+
+  // Load initial data
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
     const userRole = localStorage.getItem("userRole")
@@ -82,24 +96,11 @@ const categoryMap: { [key: number]: string } = {
       router.push("/")
       return
     }
-    // Load initial data
     loadData()
-    console.log("Loading data...")
-    
-    // Set up polling for real-time updates
-    const pollInterval = setInterval(() => {
-      loadData()
-    }, 5000) // Poll every 5 seconds
-
-    // Cleanup interval on component unmount
-    return () => {
-      clearInterval(pollInterval)
-    }
-  }, [router])
-
+  }, [])
 
   //get item name 
-   async function getItemNameById(itemId: number) {
+  const getItemNameById = useCallback(async (itemId: number) => {
     try {
       const response = await api.get(`/menuItems/${itemId}`);
       if (response.data && response.data.menu_item) {
@@ -110,10 +111,10 @@ const categoryMap: { [key: number]: string } = {
       console.error("Error fetching item name:", error);
       return `Item #${itemId}`;
     }
-  }
+  }, [])
   
   // Load data from API service
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       // Get tables
@@ -142,57 +143,52 @@ const categoryMap: { [key: number]: string } = {
         setMenuItems(menuItemsData)
       }
 
-      // Get orders with real-time status
+      // Get orders
       const ordersResponse = await api.get("/orders")
       if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
         const ordersWithItems = await Promise.all(
-          ordersResponse.data.orders.map(async (order: any) => {
-            try {
-              const orderItems = await Promise.all(
-                order.order_details.map(async (detail: any, index: number) => {
-                  const itemName = await getItemNameById(detail.item_id)
-                  return {
-                    id: index + 1,
-                    menuItemId: detail.item_id,
-                    name: itemName,
-                    price: detail.price,
-                    quantity: detail.quantity,
-                  }
-                })
-              )
+          ordersResponse.data.orders
+            .filter((order: any) => order.status !== "Annulée")
+            .map(async (order: any) => {
+              try {
+                const orderItems = await Promise.all(
+                  order.order_details.map(async (detail: any, index: number) => {
+                    const itemName = await getItemNameById(detail.item_id)
+                    return {
+                      id: index + 1,
+                      menuItemId: detail.item_id,
+                      name: itemName,
+                      price: detail.price,
+                      quantity: detail.quantity,
+                    }
+                  })
+                )
 
-              return {
-                id: order.id,
-                tableNumber: order.table_id,
-                time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-                status: order.status,
-                items: orderItems,
-                total: orderItems.reduce((sum: number, item) => sum + (item.price * item.quantity), 0),
-                notifiedKitchen: order.notified_kitchen || false,
-                notifiedCashier: order.notified_cashier || false,
+                return {
+                  id: order.id,
+                  tableNumber: order.table_id,
+                  time: new Date(order.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+                  status: order.status,
+                  items: orderItems,
+                  total: orderItems.reduce((sum: number, item) => sum + (item.price * item.quantity), 0),
+                  notifiedKitchen: order.notified_kitchen || false,
+                  notifiedCashier: order.notified_cashier || false,
+                }
+              } catch (error) {
+                console.error("Error processing order:", error)
+                return null
               }
-            } catch (error) {
-              console.error("Error processing order:", error)
-              return null
-            }
-          })
+            })
         )
 
-        // Filter out any null orders (failed to process)
         const validOrders = ordersWithItems.filter((order): order is TableOrder => order !== null)
         setOrders(validOrders)
+      }
 
-        // Update table statuses based on orders
-        setTables(prevTables => 
-          prevTables.map(table => {
-            const tableOrder = validOrders.find(order => order.tableNumber === table.number)
-            return {
-              ...table,
-              status: tableOrder ? "occupied" : "free",
-              orderId: tableOrder?.id
-            }
-          })
-        )
+      // Get packs
+      const packsResponse = await api.get("/packs")
+      if (packsResponse.data?.packs) {
+        setPacks(packsResponse.data.packs)
       }
     } catch (error) {
       console.error("Error loading data:", error)
@@ -204,7 +200,119 @@ const categoryMap: { [key: number]: string } = {
     } finally {
       setLoading(false)
     }
-  }
+  }, [getItemNameById])
+
+  // Polling pour les commandes (toutes les 5 secondes)
+  useEffect(() => {
+    const ordersInterval = setInterval(() => {
+      loadData()
+    }, 5000)
+
+    return () => clearInterval(ordersInterval)
+  }, [loadData])
+
+  // Polling pour les tables (toutes les 10 secondes)
+  useEffect(() => {
+    const loadTables = async () => {
+      try {
+        const tablesResponse = await api.get("/tables")
+        if (tablesResponse.data?.tables) {
+          setTables(tablesResponse.data.tables.map((table: any) => ({
+            id: table.id,
+            number: table.num_table,
+            seats: table.capacity,
+            status: table.status,
+            orderId: table.order_id
+          })))
+        }
+      } catch (error) {
+        console.error("Error loading tables:", error)
+      }
+    }
+
+    const tablesInterval = setInterval(loadTables, 10000)
+    return () => clearInterval(tablesInterval)
+  }, [])
+
+  // Polling pour les statuts des commandes (toutes les 3 secondes)
+  useEffect(() => {
+    const loadOrderStatuses = async () => {
+      try {
+        const ordersResponse = await api.get("/orders")
+        if (ordersResponse.data && Array.isArray(ordersResponse.data.orders)) {
+          setOrders(prevOrders => {
+            const updatedOrders = prevOrders.map(prevOrder => {
+              const updatedOrder = ordersResponse.data.orders.find(
+                (order: any) => order.id === prevOrder.id
+              )
+              if (updatedOrder) {
+                return {
+                  ...prevOrder,
+                  status: updatedOrder.status,
+                  notifiedKitchen: updatedOrder.notified_kitchen || false,
+                  notifiedCashier: updatedOrder.notified_cashier || false,
+                }
+              }
+              return prevOrder
+            })
+            return updatedOrders
+          })
+        }
+      } catch (error) {
+        console.error("Error loading order statuses:", error)
+      }
+    }
+
+    const statusInterval = setInterval(loadOrderStatuses, 3000)
+    return () => clearInterval(statusInterval)
+  }, [])
+
+  // WebSocket handling for real-time updates
+  useEffect(() => {
+    ws.onopen = () => {
+      console.log('WebSocket Connected')
+    }
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      switch (data.type) {
+        case 'ORDER_UPDATED':
+          setOrders(prev => 
+            prev.map(order => order.id === data.order.id ? data.order : order)
+          )
+          break
+        case 'ORDER_CREATED':
+          setOrders(prev => [...prev, data.order])
+          break
+        case 'ORDER_DELETED':
+          setOrders(prev => prev.filter(order => order.id !== data.orderId))
+          break
+        case 'TABLE_UPDATED':
+          setTables(prev => 
+            prev.map(table => table.id === data.table.id ? data.table : table)
+          )
+          break
+        case 'MENU_ITEM_UPDATED':
+          setMenuItems(prev => 
+            prev.map(item => item.id === data.item.id ? data.item : item)
+          )
+          break
+        case 'PACK_UPDATED':
+          setPacks(prev => 
+            prev.map(pack => pack.id === data.pack.id ? data.pack : pack)
+          )
+          break
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error('WebSocket Error:', error)
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [ws])
 
   // Start new order
   const startNewOrder = () => {
@@ -212,12 +320,19 @@ const categoryMap: { [key: number]: string } = {
   }
 
   // Select table for new order
-  const selectTableForOrder = async (table: Table) => {
-    setSelectedTable(table)
+  const selectTableForOrder = (table: Table) => {
+    if (table.status === "occupied") {
+      const existingOrder = orders.find(o => o.tableNumber === table.number);
+      if (existingOrder) {
+        setNewOrder(existingOrder);
+        setIsNewOrderDialogOpen(true);
+      }
+      return;
+    }
 
-    // Create new order for the selected table
+    setSelectedTable(table);
     setNewOrder({
-      id: Math.floor(Math.random() * 10000),
+      id: 0,
       tableNumber: table.number,
       user_id: Number(localStorage.getItem("userId")) || 1,
       type: "A place",
@@ -225,11 +340,55 @@ const categoryMap: { [key: number]: string } = {
       status: "En attente",
       items: [],
       total: 0,
-    })
-
-    setIsTableSelectionOpen(false)
-    setIsNewOrderDialogOpen(true)
+    });
+    setIsNewOrderDialogOpen(true);
   }
+
+  // Modify order function
+  const modifyOrder = useCallback(async (orderId: number) => {
+    try {
+      const orderToModify = orders.find(order => order.id === orderId)
+      if (!orderToModify) {
+        toast({
+          title: "Erreur",
+          description: "Commande non trouvée",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Trouver la table associée
+      const tableForOrder = tables.find(table => table.number === orderToModify.tableNumber)
+      if (!tableForOrder) {
+        toast({
+          title: "Erreur",
+          description: "Table non trouvée pour cette commande",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Set the table and order with original items
+      setSelectedTable(tableForOrder)
+      setNewOrder({
+        ...orderToModify,
+        items: orderToModify.items.map(item => ({
+          ...item,
+          id: item.menuItemId // Utiliser menuItemId comme ID unique
+        }))
+      })
+
+      // Open the order dialog
+      setIsNewOrderDialogOpen(true)
+    } catch (error) {
+      console.error("Error preparing order modification:", error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de modifier la commande",
+        variant: "destructive",
+      })
+    }
+  }, [orders, tables])
 
   // Add item to order
   const addItemToOrder = (item: MenuItem) => {
@@ -238,7 +397,7 @@ const categoryMap: { [key: number]: string } = {
     const existingItem = newOrder.items.find((orderItem) => orderItem.menuItemId === item.id)
 
     if (existingItem) {
-      // Increment quantity if item alPrête exists
+      // Increment quantity if item already exists
       const updatedItems = newOrder.items.map((orderItem) =>
         orderItem.menuItemId === item.id ? { ...orderItem, quantity: orderItem.quantity + 1 } : orderItem,
       )
@@ -249,9 +408,9 @@ const categoryMap: { [key: number]: string } = {
         total: calculateTotal(updatedItems),
       })
     } else {
-      // Add new item
+      // Add new item with menuItemId as ID
       const newItem: OrderItem = {
-        id: newOrder.items.length + 1,
+        id: item.id, // Utiliser l'ID du menuItem comme ID unique
         menuItemId: item.id,
         name: item.name,
         price: item.price,
@@ -273,100 +432,160 @@ const categoryMap: { [key: number]: string } = {
     })
   }
 
-  const cancelOrder = async (orderId: number) => {
+  // Send order to kitchen
+  const sendOrderToKitchen = useCallback(async () => {
+    if (!newOrder || !selectedTable) {
+      toast({
+        title: "Erreur",
+        description: "Informations de commande incomplètes",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      // First, get the order to cancel
-      const orderToCancel = orders.find(order => order.id === orderId);
+      const orderPayload = {
+        table_id: selectedTable.id,
+        type: "A table",
+        status: "En attente",
+        orderDetails: newOrder.items.map((item) => ({
+          item_id: item.menuItemId,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+      };
+
+      let response: any;
+      if (newOrder.id && typeof newOrder.id === "number") {
+        // Modification de commande existante
+        response = await api.put(`/orders/${newOrder.id}`, orderPayload);
+        
+        if (response.status === 200) {
+          // Mise à jour optimiste correcte
+          setOrders(prev => prev.map(order => 
+            order.id === newOrder.id ? {
+              ...order,
+              items: newOrder.items.map(item => ({
+                ...item,
+                id: item.menuItemId
+              })),
+              total: newOrder.total
+            } : order
+          ));
+
+          // Mettre à jour la table
+          await api.put(`/tables/${selectedTable.id}`, {
+            status: "occupied",
+            order_id: newOrder.id
+          });
+
+          // Envoyer la mise à jour via WebSocket
+          ws.send(JSON.stringify({ 
+            type: 'ORDER_UPDATED',
+            order: {
+              ...newOrder,
+              items: newOrder.items.map(item => ({
+                ...item,
+                id: item.menuItemId
+              }))
+            }
+          }));
+
+          // Fermer le dialogue
+          setIsNewOrderDialogOpen(false);
+          setNewOrder(null);
+          setSelectedTable(null);
+
+          toast({
+            title: "Succès",
+            description: "Commande modifiée avec succès",
+          });
+        }
+      } else {
+        // Nouvelle commande
+        response = await api.post("/orders", orderPayload);
+        if (response.status === 201) {
+          const orderId = response.data.id;
+          
+          // Mettre à jour la table
+          await api.put(`/tables/${selectedTable.id}`, {
+            status: "occupied",
+            order_id: orderId
+          });
+
+          // Ajouter la nouvelle commande à l'état
+          setOrders(prev => [...prev, {
+            ...newOrder,
+            id: orderId,
+            items: newOrder.items.map(item => ({
+              ...item,
+              id: item.menuItemId
+            }))
+          }]);
+
+          // Envoyer la mise à jour via WebSocket
+          ws.send(JSON.stringify({ 
+            type: 'ORDER_CREATED',
+            order: {
+              ...newOrder,
+              id: orderId,
+              items: newOrder.items.map(item => ({
+                ...item,
+                id: item.menuItemId
+              }))
+            }
+          }));
+
+          // Fermer le dialogue
+          setIsNewOrderDialogOpen(false);
+          setNewOrder(null);
+          setSelectedTable(null);
+
+          toast({
+            title: "Succès",
+            description: "Commande créée avec succès",
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Erreur:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'envoyer la commande à la cuisine",
+        variant: "destructive",
+      });
+    }
+  }, [newOrder, selectedTable, ws]);
+
+  // Cancel order function
+  const cancelOrder = useCallback(async (orderId: number) => {
+    try {
+      const orderToCancel = orders.find(order => order.id === orderId)
       if (!orderToCancel) {
         toast({
           title: "Erreur",
           description: "Commande non trouvée",
           variant: "destructive",
-        });
-        return;
+        })
+        return
       }
 
-      // Send cancel request to the API
-      const response = await api.put(`/orders/cancel/${orderId}`);
+      const response = await api.patch(`/orders/cancel/${orderId}`)
       
-      if (response.status === 200) {
-        // Update the local state to remove the cancelled order
-        setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-        
-        // If the order was associated with a table, update the table status
-        if (orderToCancel.tableNumber) {
-          setTables(prevTables => 
-            prevTables.map(table => 
-              table.number === orderToCancel.tableNumber 
-                ? { ...table, status: "free", orderId: undefined }
-                : table
-            )
-          );
-        }
-
-        toast({
-          title: "Succès",
-          description: "La commande a été annulée avec succès",
-        });
-      } else {
-        throw new Error(response.data?.message || "Erreur lors de l'annulation");
-      }
     } catch (error) {
-      console.error("Error canceling order:", error);
+      console.error("Error canceling order:", error)
       toast({
         title: "Erreur",
         description: "Impossible d'annuler la commande",
         variant: "destructive",
-      });
+      })
     }
-  };
-
-  const modifyOrder = async (orderId: number) => {
-    try {
-      const orderToModify = orders.find(order => order.id === orderId);
-      if (!orderToModify) {
-        toast({
-          title: "Erreur",
-          description: "Commande non trouvée",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Find the table associated with this order
-      const tableForOrder = tables.find(table => table.orderId === orderId);
-      if (tableForOrder) {
-        setSelectedTable(tableForOrder);
-      }
-
-      // Set the order to modify as the current order
-      setNewOrder({
-        ...orderToModify,
-        items: orderToModify.items.map(item => ({
-          id: item.id,
-          menuItemId: item.menuItemId,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity
-        }))
-      });
-
-      // Open the order dialog
-      setIsNewOrderDialogOpen(true);
-    } catch (error) {
-      console.error("Error preparing order modification:", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de modifier la commande",
-        variant: "destructive",
-      });
-    }
-  };
+  }, [orders, ws])
 
   // Update the deleteOrder function to use cancelOrder
   const deleteOrder = async (orderId: number) => {
-    await cancelOrder(orderId);
-  };
+    await cancelOrder(orderId)
+  }
 
   // Calculate total
   const calculateTotal = (items: OrderItem[]): number => {
@@ -377,92 +596,6 @@ const categoryMap: { [key: number]: string } = {
   const formatPrice = (price: number): string => {
     return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(price)
   }
-
-  // Send order to kitchen
-  const sendOrderToKitchen = async () => {
-    if (!newOrder || !selectedTable) {
-      toast({
-        title: "Erreur",
-        description: "Informations de commande incomplètes",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (newOrder.items.length === 0) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez ajouter des articles à la commande",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // Create the order payload with all required fields
-      const orderPayload = {
-        user_id: localStorage.getItem("userId") || 1,
-        table_id: selectedTable.id,
-        type: "A table",
-        esstimation_time: "00:30:00",
-        delivry_adress: null,
-        delivry_phone: null,
-        orderDetails: newOrder.items.map((item) => ({
-          item_id: item.menuItemId,
-          quantity: item.quantity,
-          price: item.price,
-        })),
-      };
-
-      let response;
-      // If this is a modification, use PUT instead of POST
-      if (newOrder.id) {
-        response = await api.put(`/orders/${newOrder.id}`, orderPayload);
-      } else {
-        response = await api.post("/orders", orderPayload);
-      }
-
-      if (response.status === 200 || response.status === 201) {
-        // Update the table status
-        const tableUpdate = await api.put(`/tables/${selectedTable.id}`, {
-          status: "occupied",
-          order_id: newOrder.id || response.data.order_id,
-        });
-
-        if (tableUpdate.data.success) {
-          setTables(prev => prev.map(t => 
-            t.id === selectedTable.id ? { 
-              ...t, 
-              status: "occupied",
-              orderId: newOrder.id || response.data.order_id 
-            } : t
-          ));
-        }
-
-        // Close the dialog and reset states
-        setNewOrder(null);
-        setSelectedTable(null);
-        setIsNewOrderDialogOpen(false);
-
-        // Refresh the orders list
-        await loadData();
-
-        toast({
-          title: "Succès",
-          description: newOrder.id ? "Commande modifiée avec succès" : "Commande créée avec succès",
-        });
-      } else {
-        throw new Error(response.data?.message || "Erreur lors de l'envoi de la commande");
-      }
-    } catch (error) {
-      console.error("Error sending order:", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'envoyer la commande à la cuisine",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Notify kitchen
   const notifyKitchen = async (orderId: number) => {
@@ -500,7 +633,7 @@ const categoryMap: { [key: number]: string } = {
   // Notify cashier
   const notifyCashier = async (orderId: number) => {
     try {
-      const response = await api.post(`/orders/${orderId}/notify-cashier`)
+      const response = await api.post(`/orders/${orderId}`)
 
       if (response.data && response.data.success) {
         // Update order status locally
@@ -554,7 +687,7 @@ const categoryMap: { [key: number]: string } = {
     }
   }
 
-  // Get status text in French
+  // Get status text
   const getStatusText = (status: string) => {
     switch (status) {
       case "En préparation":
@@ -602,7 +735,7 @@ const categoryMap: { [key: number]: string } = {
     const packItems = pack.pack_details.map((detail: any) => {
       const menuItem = detail.menuItem
       return {
-        id: newOrder.items.length + 1,
+        id: detail.item_id, // Utiliser l'ID du menuItem comme ID unique
         menuItemId: detail.item_id,
         name: menuItem ? menuItem.name : `Item #${detail.item_id}`,
         price: menuItem ? menuItem.price : 0,
@@ -662,7 +795,7 @@ const categoryMap: { [key: number]: string } = {
                 <AvatarImage src="/server.jpg" />
                 <AvatarFallback className="bg-orange-100 text-orange-700">SV</AvatarFallback>
               </Avatar>
-              <span className="font-medium">Serveur</span>
+              <span className="font-medium">{localStorage.getItem("username")}</span>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirmation(true)} title="Déconnexion">
               <LogOut className="h-5 w-5" />
@@ -689,71 +822,76 @@ const categoryMap: { [key: number]: string } = {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredOrders.map((order) => (
                 <Card key={order.id} className="relative overflow-hidden">
-                <div
-                  className={`absolute top-0 left-0 w-1 h-full ${
-                    order.status === "En préparation"
-                      ? "bg-blue-500"
-                      : order.status === "Prête"
-                      ? "bg-green-500"
-                      : order.status === "Payée"
-                      ? "bg-gray-500"
-                      : "bg-yellow-500"
-                  }`}
-                />
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle>Table {order.tableNumber}</CardTitle>
-                      <div className="flex items-center text-sm text-neutral-500 mt-1">
-                        <Clock className="h-4 w-4 mr-1" />
-                        {order.time}
-                      </div>
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                      {order.status}
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
+                  <div
+                    className={`absolute top-0 left-0 w-1 h-full ${
+                      order.status === "En préparation"
+                        ? "bg-blue-500"
+                        : order.status === "Prête"
+                        ? "bg-green-500"
+                        : order.status === "Payée"
+                        ? "bg-gray-500"
+                        : "bg-yellow-500"
+                    }`}
+                  />
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle>Table {order.tableNumber}</CardTitle>
+                        <div className="flex items-center text-sm text-neutral-500 mt-1">
+                          <Clock className="h-4 w-4 mr-1" />
+                          {order.time}
                         </div>
-                        <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
                       </div>
-                    ))}
-                    <div className="pt-3 border-t mt-3">
-                      <div className="flex justify-between font-medium">
-                        <span>Total</span>
-                        <span>{formatPrice(order.total)}</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {order.items.map((item) => (
+                        <div key={item.id} className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
+                          </div>
+                          <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
+                        </div>
+                      ))}
+                      <div className="pt-3 border-t mt-3">
+                        <div className="flex justify-between font-medium">
+                          <span>Total</span>
+                          <span>{formatPrice(order.total)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-              
-                    <div className="flex gap-2 mt-4 hover:accent-red-700   rounded-[10px]">
-                    {/* Add Delete Button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                      onClick={() => cancelOrder(order.id)}
-                    >
-                      Annuler
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                      onClick={() => modifyOrder(order.id)}
-                    >
-                      Modifier
-                    </Button>
+
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => deleteOrder(order.id)}
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={async () => {
+                          // Prevent duplicate dialogs or glitches by ensuring only one dialog is open and order state is set correctly
+                          setIsNewOrderDialogOpen(false);
+                          setTimeout(async () => {
+                            await modifyOrder(order.id);
+                          }, 0);
+                        }}
+                      >
+                        Modifier
+                      </Button>
                     </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
               ))}
 
               {filteredOrders.length === 0 && (
@@ -774,14 +912,22 @@ const categoryMap: { [key: number]: string } = {
                 <Card
                   key={table.id}
                   className={`cursor-pointer hover:shadow-md transition-shadow ${getTableStatusColor(table.status)}`}
-                  onClick={() => selectTableForOrder(table)}
+                  onClick={() => {
+                    if (table.status === "occupied") {
+                      const order = orders.find(o => o.tableNumber === table.number);
+                      if (order) modifyOrder(order.id);
+                    } else {
+                      selectTableForOrder(table);
+                    }
+                  }}
                 >
                   <CardContent className="p-4 text-center">
                     <h3 className="text-lg font-bold mb-1">Table {table.number}</h3>
                     <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
-                        table.status === "free"
+                       
+                        table.status === "available"
                           ? "bg-green-200 text-green-800"
                           : table.status === "occupied"
                             ? "bg-blue-200 text-blue-800"
@@ -818,7 +964,7 @@ const categoryMap: { [key: number]: string } = {
                   <p className="text-sm text-neutral-600 mb-2">{table.seats} places</p>
                   <span
                     className={`text-xs px-2 py-1 rounded-full ${
-                      table.status === "free"
+                      table.status === "available"
                         ? "bg-green-200 text-green-800"
                         : table.status === "occupied"
                           ? "bg-blue-200 text-blue-800"
@@ -964,12 +1110,33 @@ const categoryMap: { [key: number]: string } = {
                   <div className="border rounded-lg divide-y max-h-[50vh] overflow-y-auto">
                     {newOrder.items.length > 0 ? (
                       newOrder.items.map((item) => (
-                        <div key={item.id} className="p-3 flex justify-between items-start">
+                        <div key={item.id} className="p-3 flex justify-between items-start group">
                           <div>
                             <p className="font-medium">{item.name}</p>
                             <p className="text-sm text-neutral-500">Quantité: {item.quantity}</p>
                           </div>
-                          <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => {
+                                const updatedItems = newOrder.items.filter(i => i.id !== item.id);
+                                setNewOrder({
+                                  ...newOrder,
+                                  items: updatedItems,
+                                  total: calculateTotal(updatedItems)
+                                });
+                                toast({
+                                  title: "Article supprimé",
+                                  description: `${item.name} a été retiré de la commande`,
+                                });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))
                     ) : (
@@ -1016,7 +1183,7 @@ const categoryMap: { [key: number]: string } = {
         </DialogContent>
       </Dialog>
 
-      {/* Logout confirmation dialog  */}
+      {/* Logout confirmation dialog */}
       <LogoutConfirmationDialog isOpen={showLogoutConfirmation} onClose={() => setShowLogoutConfirmation(false)} />
     </div>
   )
