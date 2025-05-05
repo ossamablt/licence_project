@@ -988,7 +988,7 @@ export default function ServerInterface() {
 
       {/* New Order Dialog */}
       <Dialog open={isNewOrderDialogOpen} onOpenChange={setIsNewOrderDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Commande - Table {selectedTable?.number}</DialogTitle>
             <DialogDescription>Sélectionnez les articles et packs pour la commande</DialogDescription>

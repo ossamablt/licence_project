@@ -244,30 +244,19 @@ export default function CashierInterface() {
   const fetchTables = async () => {
     try {
       const response = await api.get("/tables")
-      if (response.data && response.data.tables) {
-        setTables(response.data.tables)
-        console.log("Tables:", response.data.tables)
-      } else {
-        throw new Error("Invalid response format")
+      if (response.data?.tables) {
+        const tablesWithStatus = response.data.tables.map((table: any) => ({
+          ...table,
+          status: table.status || "free" // Fallback si le statut n'est pas défini
+        }))
+        setTables(tablesWithStatus)
       }
     } catch (error) {
       console.error("Erreur lors de la récupération des tables:", error)
-      // Fallback to mock data from sharedDataService
-     
-      const mockTables = getTables().map((table: { id: number; number: number; seats: number }) => ({
-        id: table.id,
-        num_table: table.number,
-        capacity: table.seats,
-        created_at: null,
-        updated_at: null,
-        number: table.number,
-        seats: table.seats,
-        status: "free" as "free",
-      }))
-      setTables(mockTables)
       toast({
-        title: "Mode démo",
-        description: "Utilisation des données de démonstration pour les tables",
+        title: "Erreur",
+        description: "Échec du chargement des tables",
+        variant: "destructive",
       })
     }
   }
@@ -278,22 +267,24 @@ export default function CashierInterface() {
 
 
   const deleteTable = async (tableId: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer cette table ?")) return
+    
     try {
-      await api.delete(`/tables/${tableId}`);
-      fetchTables(); // Refresh table list
+      await api.delete(`/tables/${tableId}`)
+      await fetchTables()
       toast({
         title: "Succès",
         description: "Table supprimée avec succès",
-      });
+      })
     } catch (error) {
-      console.error("Erreur lors de la suppression de la table:", error);
+      console.error("Erreur lors de la suppression:", error)
       toast({
         title: "Erreur",
         description: "Échec de la suppression de la table",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
 
   // Charger les données depuis le service partagé
@@ -620,50 +611,16 @@ export default function CashierInterface() {
 
       if (isEditingReservation && selectedReservation) {
         await api.put(`/reservation/${selectedReservation.id}`, reservationData)
-        // Add success alert
-        const toast = document.createElement("div")
-        toast.textContent = "Réservation modifiée avec succès."
-        toast.style.position = "fixed"
-        toast.style.bottom = "32px"
-        toast.style.right = "32px"
-        toast.style.background = "#f97316"
-        toast.style.color = "#fff"
-        toast.style.padding = "14px 24px"
-        toast.style.borderRadius = "8px"
-        toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
-        toast.style.fontSize = "1rem"
-        toast.style.zIndex = "9999"
-        toast.style.opacity = "0"
-        toast.style.transition = "opacity 0.3s"
-        document.body.appendChild(toast)
-        setTimeout(() => { toast.style.opacity = "1" }, 10)
-        setTimeout(() => {
-          toast.style.opacity = "0"
-          setTimeout(() => document.body.removeChild(toast), 300)
-        }, 2000)
+        toast({
+          title: "Succès",
+          description: "Réservation mise à jour avec succès",
+        })
       } else {
         await api.post("/reservation", reservationData)
-        // Add success alert
-        const toast = document.createElement("div")
-        toast.textContent = "Réservation ajoutée avec succès."
-        toast.style.position = "fixed"
-        toast.style.bottom = "32px"
-        toast.style.right = "32px"
-        toast.style.background = "#f97316"
-        toast.style.color = "#fff"
-        toast.style.padding = "14px 24px"
-        toast.style.borderRadius = "8px"
-        toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
-        toast.style.fontSize = "1rem"
-        toast.style.zIndex = "9999"
-        toast.style.opacity = "0"
-        toast.style.transition = "opacity 0.3s"
-        document.body.appendChild(toast)
-        setTimeout(() => { toast.style.opacity = "1" }, 10)
-        setTimeout(() => {
-          toast.style.opacity = "0"
-          setTimeout(() => document.body.removeChild(toast), 300)
-        }, 2000)
+        toast({
+          title: "Succès",
+          description: "Réservation ajoutée avec succès",
+        })
       }
 
       // Refresh both today's reservations and the selected date's reservations
@@ -756,6 +713,41 @@ export default function CashierInterface() {
     const month = String(date.getMonth() + 1).padStart(2, "0")
     const day = String(date.getDate()).padStart(2, "0")
     return `${year}-${month}-${day}`
+  }
+
+  const handleTableSubmit = async () => {
+    try {
+      if (selectedTable) {
+        await api.put(`/tables/${selectedTable.id}`, {
+          num_table: tableFormData.num_table,
+          capacity: tableFormData.capacity,
+          status: selectedTable.status // Conserver le statut existant
+        })
+        toast({
+          title: "Succès",
+          description: "Table mise à jour avec succès",
+        })
+      } else {
+        await api.post("/tables", {
+          ...tableFormData,
+          status: "free"
+        })
+        toast({
+          title: "Succès",
+          description: "Table ajoutée avec succès",
+        })
+      }
+      
+      await fetchTables()
+      setEditTableDialogOpen(false)
+    } catch (error) {
+      console.error("Erreur lors de l'opération:", error)
+      toast({
+        title: "Erreur",
+        description: "Échec de l'opération sur la table",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -1029,23 +1021,24 @@ export default function CashierInterface() {
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {tables.map((table) => {
-                const tableOrders = orders.filter(order => order.tableId === table.id)
-                const hasActiveOrder = tableOrders.some(order => order.status === "ready")
-                const isOccupied = tableOrders.some(order => order.status !== "paid")
+                const tableOrders = orders.filter(order => 
+                  order.tableId === table.id && order.status !== "paid"
+                )
+                const isOccupied = table.status === "occupied" || tableOrders.length > 0
 
                 return (
                   <Card
                     key={table.id}
                     className={`cursor-pointer hover:border-blue-300 transition-colors relative ${
-                      isOccupied ? "border-blue-300 bg-blue-50" : "border-gray-300 bg-gray-50"
+                      getTableStatusColor(table.status)
                     }`}
                     onClick={() => selectTable(table)}
                   >
                     <CardHeader className="p-3 pb-0">
                       <CardTitle className="text-sm flex justify-between items-center">
                         <span>Table {table.num_table}</span>
-                        <Badge className={isOccupied ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
-                          {isOccupied ? "Occupée" : "Libre"}
+                        <Badge className={getTableStatusColor(table.status).replace("border-", "bg-").replace("300", "100")}>
+                          {getTableStatusText(table.status)}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
@@ -1069,7 +1062,7 @@ export default function CashierInterface() {
                             }}
                           >
                             <CreditCard className="h-3 w-3 mr-1" />
-                            {hasActiveOrder ? "Encaisser" : "Voir commandes"}
+                            {tableOrders.length > 0 ? "Encaisser" : "Détails"}
                           </Button>
                           {tableOrders.length > 0 && (
                             <div className="text-xs text-gray-500">
@@ -1079,6 +1072,35 @@ export default function CashierInterface() {
                         </div>
                       )}
                     </CardContent>
+                    <div className="absolute top-1 right-1 flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedTable(table)
+                          setTableFormData({
+                            num_table: table.num_table,
+                            capacity: table.capacity
+                          })
+                          setEditTableDialogOpen(true)
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 text-red-500"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteTable(table.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </Card>
                 )
               })}
@@ -1274,13 +1296,7 @@ export default function CashierInterface() {
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0">
-                              <CalendarComponent
-                                mode="single"
-                                selected={date}
-                                onSelect={setDate}
-                                initialFocus
-                                locale={fr}
-                              />
+                              <CalendarComponent mode="single" selected={date} onSelect={setDate} initialFocus locale={fr} />
                             </PopoverContent>
                           </Popover>
                         </div>
@@ -1649,21 +1665,6 @@ export default function CashierInterface() {
           </div>
 
           <DialogFooter>
-            {selectedTable && (
-              <Button 
-                variant="destructive"
-                onClick={async () => {
-                  if (confirm("Êtes-vous sûr de vouloir supprimer cette table ?")) {
-                    await deleteTable(selectedTable.id);
-                    setEditTableDialogOpen(false);
-                  }
-                }}
-                className="mr-auto bg-red-500"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Supprimer
-              </Button>
-            )}
             <Button
               variant="outline"
               onClick={() => {
@@ -1674,78 +1675,7 @@ export default function CashierInterface() {
             </Button>
             <Button
               className="bg-orange-500 hover:bg-orange-600"
-              onClick={async () => {
-                try {
-                  if (selectedTable) {
-                    // Mise à jour de la table existante
-                    await api.put(`/tables/${selectedTable.id}`, {
-                        num_table: tableFormData.num_table,
-                        capacity: tableFormData.capacity
-                    });
-                    // Add success alert for table update
-                    const toast = document.createElement("div")
-                    toast.textContent = "Table mise à jour avec succès."
-                    toast.style.position = "fixed"
-                    toast.style.bottom = "32px"
-                    toast.style.right = "32px"
-                    toast.style.background = "#f97316"
-                    toast.style.color = "#fff"
-                    toast.style.padding = "14px 24px"
-                    toast.style.borderRadius = "8px"
-                    toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
-                    toast.style.fontSize = "1rem"
-                    toast.style.zIndex = "9999"
-                    toast.style.opacity = "0"
-                    toast.style.transition = "opacity 0.3s"
-                    document.body.appendChild(toast)
-                    setTimeout(() => { toast.style.opacity = "1" }, 10)
-                    setTimeout(() => {
-                      toast.style.opacity = "0"
-                      setTimeout(() => document.body.removeChild(toast), 300)
-                    }, 2000)
-                  } else {
-                    // Création d'une nouvelle table
-                    await api.post("/tables", {
-                        num_table: tableFormData.num_table,
-                        capacity: tableFormData.capacity,
-                        status: "free"
-                    });
-                    // Add success alert for new table
-                    const toast = document.createElement("div")
-                    toast.textContent = "Table ajoutée avec succès."
-                    toast.style.position = "fixed"
-                    toast.style.bottom = "32px"
-                    toast.style.right = "32px"
-                    toast.style.background = "#f97316"
-                    toast.style.color = "#fff"
-                    toast.style.padding = "14px 24px"
-                    toast.style.borderRadius = "8px"
-                    toast.style.boxShadow = "0 2px 12px rgba(0,0,0,0.12)"
-                    toast.style.fontSize = "1rem"
-                    toast.style.zIndex = "9999"
-                    toast.style.opacity = "0"
-                    toast.style.transition = "opacity 0.3s"
-                    document.body.appendChild(toast)
-                    setTimeout(() => { toast.style.opacity = "1" }, 10)
-                    setTimeout(() => {
-                      toast.style.opacity = "0"
-                      setTimeout(() => document.body.removeChild(toast), 300)
-                    }, 2000)
-                  }
-                  
-                  fetchTables(); // Rafraîchir la liste des tables
-                  setEditTableDialogOpen(false);
-                  setTableFormData({ num_table: 1, capacity: 2 }); // Réinitialiser le formulaire
-
-                } catch (error) {
-                  console.error("Erreur lors de l'opération sur la table:", error);
-                  toast({
-                    title: "Erreur",
-                    description: "Échec de l'opération sur la table",
-                    variant: "destructive",
-                  });
-                }
-              }}
+              onClick={handleTableSubmit}
             >
               {selectedTable ? "Enregistrer" : "Ajouter"}
             </Button>
