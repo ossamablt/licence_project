@@ -35,6 +35,7 @@ interface Order {
   }[]
   notifiedKitchen: boolean
   notifiedCashier: boolean
+  estimation_time?: string
 }
 
 export default function KitchenInterface() {
@@ -138,6 +139,7 @@ export default function KitchenInterface() {
           })),
           notifiedKitchen: o.notified_kitchen || true,
           notifiedCashier: o.notified_cashier || false,
+          estimation_time: o.estimation_time,
         };
       });
 
@@ -321,6 +323,11 @@ export default function KitchenInterface() {
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
+                          {order.estimation_time && (
+                            <span className="ml-2 text-orange-500">
+                              ⏱ {order.estimation_time} min
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
@@ -376,6 +383,11 @@ export default function KitchenInterface() {
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
+                          {order.estimation_time && (
+                            <span className="ml-2 text-orange-500">
+                              ⏱ {order.estimation_time} min
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
@@ -431,6 +443,11 @@ export default function KitchenInterface() {
                         <div className="flex items-center text-sm text-neutral-500 mt-1">
                           <Clock className="h-4 w-4 mr-1" />
                           {order.time}
+                          {order.estimation_time && (
+                            <span className="ml-2 text-orange-500">
+                              ⏱ {order.estimation_time} min
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>

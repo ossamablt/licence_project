@@ -424,7 +424,7 @@ export default function RestaurantManagement() {
                   {username ? username.charAt(0).toUpperCase() : "A"}
                 </AvatarFallback>
               </Avatar>
-              <span className="font-medium">{username}</span>
+              <span className="font-medium">{localStorage.getItem("username")}</span>
             </div>
             <Button variant="destructive" onClick={() => setShowLogoutConfirmation(true)}>
               <LogOut className="h-4 w-4 mr-2" />
