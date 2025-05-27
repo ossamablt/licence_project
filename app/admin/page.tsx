@@ -97,9 +97,18 @@ export default function RestaurantManagement() {
 
   const [isMobile, setIsMobile] = useState(false)
   const [username, setUsername] = useState<string>("")
+  const [isClient, setIsClient] = useState(false)
+
+  // Initialize client-side state
+  useEffect(() => {
+    setIsClient(true)
+    setLoading(false)
+  }, [])
 
   // Handle screen resize
   useEffect(() => {
+    if (!isClient) return
+
     const checkIfMobile = () => {
       setIsMobile(window.innerWidth < 768)
       setSidebarOpen(window.innerWidth >= 768)
@@ -111,20 +120,26 @@ export default function RestaurantManagement() {
     return () => {
       window.removeEventListener("resize", checkIfMobile)
     }
-  }, [])
+  }, [isClient])
 
-  // Check login and role
+  // Check login and role - only run on client side
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
-    const userRole = localStorage.getItem("userRole")
-    const storedUsername = localStorage.getItem("username") || ""
+    if (!isClient) return
 
-    setUsername(storedUsername)
+    const checkAuth = () => {
+      const isLoggedIn = localStorage.getItem("isLoggedIn") === "true"
+      const userRole = localStorage.getItem("userRole")
+      const storedUsername = localStorage.getItem("username") || ""
 
-    if (!isLoggedIn || userRole !== "Gérant") {
-      router.push("/")
+      setUsername(storedUsername)
+
+      if (!isLoggedIn || userRole !== "Gérant") {
+        router.push("/")
+      }
     }
-  }, [router])
+
+    checkAuth()
+  }, [router, isClient])
 
   // Load users and employees when user management section is active
   useEffect(() => {
@@ -319,10 +334,12 @@ export default function RestaurantManagement() {
   }
 
   useEffect(() => {
+    if (!isClient) return
+    
     fetchNotifications()
     const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [isClient])
 
   // Mark a notification as read
   const markNotificationAsRead = async (id: string) => {
@@ -349,9 +366,11 @@ export default function RestaurantManagement() {
   const unreadCount = notifications.filter(n => !n.read_at).length
 
   const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("userRole")
-    localStorage.removeItem("username")
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem("isLoggedIn")
+      localStorage.removeItem("userRole")
+      localStorage.removeItem("username")
+    }
     router.push("/")
   }
 
@@ -359,6 +378,26 @@ export default function RestaurantManagement() {
   useEffect(() => {
     console.log("Current users state:", users)
   }, [users])
+
+  // Helper function to safely get username from localStorage
+  const getStoredUsername = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("username") || ""
+    }
+    return ""
+  }
+
+  // Show loading state until client-side hydration is complete
+  if (!isClient) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-orange-50/50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex bg-orange-50/50 text-gray-800 relative">
@@ -424,7 +463,7 @@ export default function RestaurantManagement() {
                   {username ? username.charAt(0).toUpperCase() : "A"}
                 </AvatarFallback>
               </Avatar>
-              <span className="font-medium">{localStorage.getItem("username")}</span>
+              <span className="font-medium">{username}</span>
             </div>
             <Button variant="destructive" onClick={() => setShowLogoutConfirmation(true)}>
               <LogOut className="h-4 w-4 mr-2" />
